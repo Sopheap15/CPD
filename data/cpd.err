@@ -1,0 +1,4 @@
+Pixi task (start): python main.py
+2026-08-19 12:50:19,581 - cpd.bot - INFO - Starting CPD Track bot (polling)…
+2026-08-19 12:50:20,869 - apscheduler.scheduler - INFO - Scheduler started
+2026-08-19 12:50:20,870 - telegram.ext.Application - INFO - Application started

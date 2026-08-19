@@ -29,7 +29,10 @@ def _row(title: str, value: str) -> str:
 
 
 def _date(value: str) -> str:
-    return value.split(" ")[0] if value else EMPTY
+    if not value:
+        return EMPTY
+    parts = [p.strip().split(" ")[0] for p in value.split(",") if p.strip()]
+    return ", ".join(p for p in parts if p)
 
 
 # ------------------------------------------------------------------ header
@@ -85,8 +88,12 @@ def _certificate_line(c: Certificate, matched_training: Training | None = None) 
         if pickup_by and pickup_by.lower() not in ("nan", "-", "n/a"):
             extra += f" ដោយ {_esc(pickup_by)}"
 
-    line = "• " + " · ".join(bits)
-    return f"{line} ({extra})" if extra else line
+    if extra:
+        return f"• {extra}"
+    else:
+        status = inline("not_picked_up")
+        line = "• " + " · ".join(bits)
+        return line
 
 
 def training_lines(trainings: Iterable[Training]) -> str:
@@ -163,7 +170,12 @@ def _cert_status_for_trainings(
             pb = c.pickup_by.strip() if c.pickup_by else ""
             if pb and pb.lower() not in ("nan", "-", "n/a"):
                 extra += f" ដោយ {_esc(pb)}"
-            line += f" ({extra})"
+            line = f"• {extra}"
+        else:
+            status = inline("not_picked_up")
+            line = f"• <b>{_esc(status)}</b>"
+            if title_str:
+                line += f" · {title_str}"
         lines.append(line)
     return lines
 

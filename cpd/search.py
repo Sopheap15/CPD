@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import unicodedata
 from difflib import SequenceMatcher
-from typing import Iterable
+from typing import TYPE_CHECKING, Any, Iterable
 
 from cpd.data_loader import Participant
+
+if TYPE_CHECKING:
+    from cpd.data_loader import CpdData
 
 # Only offer alternatives when the best match is clearly better than the second.
 AUTO_SELECT_MARGIN = 0.25
@@ -114,3 +117,76 @@ def find_best(participants: list[Participant], name: str) -> Participant | None:
     showing a different person's data.
     """
     return exact_participant(participants, name)
+
+
+def find_participant_by_secret(participants: list[Participant], secret: str) -> Participant | None:
+    """Find a participant by their participant ID or Phone Number."""
+    s = secret.strip().lower()
+    if not s:
+        return None
+    
+    # Try exact participant_id match
+    for p in participants:
+        if p.participant_id and p.participant_id.strip().lower() == s:
+            return p
+            
+    # Try phone number match
+    from cpd.real_data import _norm_phone, _phone_tokens
+    s_phone = _norm_phone(s)
+    if s_phone:
+        for p in participants:
+            tokens = _phone_tokens(p.phone)
+            if s_phone in tokens:
+                return p
+                
+    return None
+
+def search_all_fields(query: str, data: "CpdData") -> tuple[Participant | None, list[str]]:
+    """Search across all participant fields (ID, Phone, Name, Email, Dept)."""
+    q = query.strip().lower()
+    if not q:
+        return None, []
+        
+    # 1. Try strict ID/Phone match first
+    p_exact = find_participant_by_secret(data.participants, query)
+    if p_exact:
+        return p_exact, []
+        
+    # 2. Check for substring match in ANY participant field
+    matches = []
+    q_norm = normalize_name(query)
+    
+    for p in data.participants:
+        # Collect all fields
+        fields = [
+            p.participant_id, p.name, p.khmer_name, 
+            p.profession, p.department, p.email, p.phone
+        ]
+        text_to_search = " ".join([str(f) for f in fields if f]).lower()
+        norm_text = normalize_name(text_to_search)
+        
+        if q in text_to_search or (q_norm and q_norm in norm_text):
+            # Record the primary display name for this matched participant
+            matches.append(p.name or p.khmer_name or p.participant_id)
+            
+    # Deduplicate matches
+    matches = list(dict.fromkeys([m for m in matches if m]))
+    
+    # 3. If no matches in participants, fallback to fuzzy name search on all data (including trainings/certs)
+    if not matches:
+        chosen, shortlist, _auto = resolve_participant(query, data.all_names(), data.participants)
+        if chosen:
+            return chosen, []
+        return None, shortlist
+        
+    # 4. If we found matches via substring in fields
+    if len(matches) == 1:
+        # Find the actual participant object for this name
+        p_name = matches[0]
+        # Resolve it fully (could be from data.participants)
+        p_resolved = exact_participant(data.participants, p_name)
+        if p_resolved:
+            return p_resolved, []
+        return Participant(participant_id="", name=p_name), []
+        
+    return None, matches[:10]  # Limit to 10 choices

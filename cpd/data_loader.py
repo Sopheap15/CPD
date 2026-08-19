@@ -78,6 +78,17 @@ FILE_COLUMNS = {
 
 
 @dataclass
+class Course:
+    course_id: str = ""
+    title: str = ""
+    date: str = ""
+    cpd_points: str = ""
+    link: str = ""
+    status: str = ""
+    fee: float = 0.0
+
+
+@dataclass
 class Participant:
     participant_id: str
     name: str
@@ -143,6 +154,19 @@ def _as_bool(value: Any) -> bool:
     return bool(value) if not s else False
 
 
+def _parse_fee(value: Any) -> float:
+    """Parse a course fee (USD) from a cell, tolerating empty/text/currency."""
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    s = str(value).strip().replace("$", "").replace(",", "")
+    try:
+        return float(s)
+    except ValueError:
+        return 0.0
+
+
 def _read_sheet(path: Path, column_map: dict[str, str]) -> pd.DataFrame:
     df = pd.read_excel(path, sheet_name=0)
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
@@ -175,6 +199,7 @@ class CpdData:
         self.participants: list[Participant] = []
         self.trainings: list[Training] = []
         self.certificates: list[Certificate] = []
+        self.courses: list[Course] = []
         self._trainings_by_id: dict[str, list[Training]] = {}
         self._trainings_by_name: dict[str, list[Training]] = {}
         self._certs_by_id: dict[str, list[Certificate]] = {}
@@ -183,7 +208,7 @@ class CpdData:
 
     # ------------------------------------------------------------------ API
     def _file_mtimes(self) -> dict[str, int]:
-        """Map relative filename -> last-modified time for every .xlsx file."""
+        """Map relative filename -> last-modified time for every data file."""
         mtimes: dict[str, int] = {}
         roots = [self._data_dir, self._data_dir / ".google"]
         for root in roots:
@@ -191,6 +216,9 @@ class CpdData:
                 continue
             for path in sorted(root.glob("*.xlsx")):
                 mtimes[str(path)] = int(path.stat().st_mtime)
+        from cpd.registrations import REGISTRATIONS_FILE
+        if REGISTRATIONS_FILE.exists():
+            mtimes[str(REGISTRATIONS_FILE)] = int(REGISTRATIONS_FILE.stat().st_mtime)
         return mtimes
 
     def _maybe_refresh_google(self) -> bool:
@@ -271,6 +299,24 @@ class CpdData:
             self.participants = []
             self.trainings = []
             self.certificates = []
+            self.courses = []
+
+            # Load courses first
+            course_path = self._data_dir / "courses.xlsx"
+            if course_path.exists():
+                df = pd.read_excel(course_path)
+                for _, row in df.iterrows():
+                    self.courses.append(
+                        Course(
+                            course_id=_norm(row.get("Course ID", "")),
+                            title=_norm(row.get("Title", "")),
+                            date=_norm(row.get("Date", "")),
+                            cpd_points=_norm(row.get("CPD Points", "")),
+                            link=_norm(row.get("Link", "")),
+                            status=_norm(row.get("status", "")),
+                            fee=_parse_fee(row.get("fee", row.get("Fee", 0))),
+                        )
+                    )
 
             # Prefer live Google Sheets tabs when they are configured.
             if self._google_reg_dfs or self._google_cert_dfs:
@@ -289,6 +335,7 @@ class CpdData:
             real = load_real_data(self._data_dir)
             if real is not None:
                 self.participants, self.trainings, self.certificates = real
+                self._merge_registrations()
                 self._rebuild_indices()
                 self._loaded = True
                 return
@@ -347,6 +394,53 @@ class CpdData:
 
             self._rebuild_indices()
             self._loaded = True
+
+    def _merge_registrations(self) -> None:
+        """Merge in-bot course registrations into participants + trainings."""
+        from cpd.registrations import load_registrations
+
+        by_name: dict[str, Participant] = {}
+        for p in self.participants:
+            key = (p.name or "").strip().lower()
+            if key:
+                by_name.setdefault(key, p)
+
+        for reg in load_registrations():
+            name = (reg.get("name") or "").strip()
+            if not name:
+                continue
+            participant_id = (reg.get("participant_id") or "").strip()
+            phone = (reg.get("phone") or "").strip()
+            location = (reg.get("location") or "").strip()
+
+            p = by_name.get(name.lower())
+            if p is None:
+                p = Participant(
+                    participant_id=participant_id,
+                    name=name,
+                    phone=phone,
+                    department=location,
+                )
+                self.participants.append(p)
+                by_name[name.lower()] = p
+            elif participant_id and not p.participant_id:
+                p.participant_id = participant_id
+            elif phone and not p.phone:
+                p.phone = phone
+
+            course_title = (reg.get("course_title") or "").strip()
+            course_date = (reg.get("course_date") or "").strip()
+            points = (reg.get("cpd_points") or "").strip()
+            self.trainings.append(
+                Training(
+                    participant_id=p.participant_id,
+                    participant_name=p.name,
+                    title=course_title or (reg.get("course_id") or "").strip(),
+                    date=course_date,
+                    cpd_points=points,
+                    status="Registered",
+                )
+            )
 
     def _rebuild_indices(self) -> None:
         self._trainings_by_id = {}

@@ -73,26 +73,55 @@ def _iso_date(value) -> str:
     return ""
 
 
-def _parse_session_date(text: str) -> str:
-    """Best-effort parse of a Khmer session label → 'YYYY-MM-DD'.
+def _parse_session_dates(text: str) -> list[str]:
+    """Best-effort parse of a Khmer session label → list of 'YYYY-MM-DD'.
 
-    E.g. "ថ្ងៃសុក្រ ទី១២ (រសៀល) និងថ្ងៃសៅរ៏ (ព្រឹក) ទី១៣ ខែមិថុនា ឆ្នាំ២០២៦"
-    becomes "2026-06-12".
+    Handles both single- and multi-day labels, pairing each "ទី<day>" with
+    the month/year that follows it (multi-day labels share a trailing month):
+
+      "ថ្ងៃសុក្រ ទី១២ (រសៀល) និងថ្ងៃសៅរ៏ (ព្រឹក) ទី១៣ ខែមិថុនា ឆ្នាំ២០២៦"
+      → ["2026-06-12", "2026-06-13"]
+
+      "ថ្ងៃសុក្រ ទី៣១ ខែកក្កដា ឆ្នាំ២០២៦ និង (ព្រឹក) ថ្ងៃសៅរ៏ ទី១ ខែសីហា ឆ្នាំ២០២៦"
+      → ["2026-07-31", "2026-08-01"]
     """
     t = _latinize(text or "")
-    days = re.findall(r"ថ្ងៃ\S*\s*ទី(\d{1,2})", t)
-    month = None
+    day_positions = [(m.start(), int(m.group(1))) for m in re.finditer(r"ថ្ងៃ\S*\s*ទី(\d{1,2})", t)]
+
+    month_positions = []
     for name, num in KHMER_MONTHS.items():
-        if name in t:
-            month = num
-            break
-    year = None
-    ym = re.search(r"ឆ្នាំ(\d{4})", t)
-    if ym:
-        year = int(ym.group(1))
-    if days and month and year:
-        return f"{year:04d}-{month:02d}-{int(days[0]):02d}"
-    return ""
+        for m in re.finditer(name, t):
+            month_positions.append((m.start(), num))
+    month_positions.sort()
+
+    year_positions = [(m.start(), int(m.group(1))) for m in re.finditer(r"ឆ្នាំ(\d{4})", t)]
+    year_positions.sort()
+
+    dates: list[str] = []
+    for day_pos, day in day_positions:
+        month = None
+        for mpos, num in month_positions:
+            if mpos > day_pos:
+                month = num
+                break
+        if month is None and month_positions:
+            month = month_positions[-1][1]
+        year = None
+        for ypos, y in year_positions:
+            if ypos > day_pos:
+                year = y
+                break
+        if year is None and year_positions:
+            year = year_positions[-1][1]
+        if month and year:
+            dates.append(f"{year:04d}-{month:02d}-{day:02d}")
+    return dates
+
+
+def _parse_session_date(text: str) -> str:
+    """First session date of a Khmer session label → 'YYYY-MM-DD', or ''."""
+    dates = _parse_session_dates(text)
+    return dates[0] if dates else ""
 
 
 def _topic_summary(header: str) -> tuple[str, str, str]:
@@ -108,13 +137,13 @@ def _topic_summary(header: str) -> tuple[str, str, str]:
         round_no = rm.group(1)
 
     title = ""
-    qm = re.search(r"[‘\"“„](.*?)[’\"”„]", header, re.S)
+    qm = re.search(r"[«‘\"“„](.*?)[»’\"”„]", header, re.S)
     if qm:
         title = qm.group(1).strip()
     if not title:
         title = header.strip()
     title = re.sub(r"\s+", " ", title).strip()
-    title = title.strip(" ‘\"“„’”'")
+    title = title.strip(" «»‘\"“„’”'")
 
     points = ""
     pm = re.search(r"(\d{1,4})\s*ពិន្ទុ", _latinize(header))
@@ -179,6 +208,117 @@ def _dedup_participants(participants: list[Participant]) -> list[Participant]:
             existing.phone = existing.phone or p.phone
             existing.department = existing.department or p.department
     return list(seen.values())
+
+
+def _is_transformed_file(path: Path) -> bool:
+    """Detect the combined 'Transformed ... with Certificates' workbook.
+
+    One row per (participant, topic, session) selection. Columns include a
+    full topic title, the selected session label, registration status, and a
+    certificate pickup date column.
+    """
+    df = pd.read_excel(path, nrows=1)
+    cols = [str(c) for c in df.columns]
+    return any("វគ្គដែលបានជ្រើសរើស" in c for c in cols) and any(
+        "ឈ្មោះប្រធានបទពេញ" in c for c in cols
+    )
+
+
+def load_transformed(path: Path) -> tuple[list[Participant], list[Training], list[Certificate]]:
+    return transformed_from_df(pd.read_excel(path))
+
+
+def transformed_from_df(
+    df: pd.DataFrame,
+) -> tuple[list[Participant], list[Training], list[Certificate]]:
+    """Parse the combined 'Transformed' registration + certificate workbook.
+
+    One row per (participant, topic, session). Only rows whose status is
+    "បានចុះឈ្មោះ" (registered) and that carry a real session label produce a
+    training. The certificate pickup date column is per row (the same date is
+    repeated across a participant's rows), so a single pickup visit is mapped
+    onto every one of that participant's trainings.
+    """
+    cols = list(df.columns)
+    col_topic = _find_col(cols, "ឈ្មោះប្រធានបទពេញ")
+    col_session = _find_col(cols, "វគ្គដែលបានជ្រើសរើស")
+    col_status = _find_col(cols, "ស្ថានភាពចុះឈ្មោះ")
+    col_name = _find_col(cols, "ឈ្មោះជាភាសាឡាតាំង", "ឡាតាំង", "English")
+    col_khmer = _find_col(cols, "ឈ្មោះជាភាសាខ្មែរ", "ខ្មែរ", "Khmer")
+    col_pcc = _find_col(cols, "លេខបញ្ជិកាឱសថការី", "បញ្ជិកា")
+    col_department = _find_col(cols, "សមាជិកគណៈឱសថការី")
+    col_phone = _find_col(cols, "លេខទូរស័ព្ទ")
+    col_pickup = _find_col(cols, "បានទទួលវិញ្ញាបនបត្រ")
+
+    participants: list[Participant] = []
+    trainings: list[Training] = []
+    certificates: list[Certificate] = []
+
+    seen_trainings: set[tuple[str, str, str]] = set()
+    for _, row in df.iterrows():
+        status = _norm(row.get(col_status, "")) if col_status else ""
+        if status != "បានចុះឈ្មោះ":
+            continue
+
+        session = _norm(row.get(col_session, "")) if col_session else ""
+        if not session or session in ("មិនចុះឈ្មោះ",):
+            continue
+
+        name = _clean_name(row.get(col_name, "")) if col_name else ""
+        if not name:
+            continue
+
+        participant_id = str(row.get(col_pcc, "")).strip() if col_pcc else ""
+        p = Participant(
+            participant_id=participant_id,
+            name=name,
+            khmer_name=_clean_name(row.get(col_khmer, "")) if col_khmer else "",
+            profession="",
+            department=str(row.get(col_department, "")).strip() if col_department else "",
+            phone=_clean_name(row.get(col_phone, "")) if col_phone else "",
+        )
+        participants.append(p)
+
+        title, organizer, points = _topic_summary(str(row.get(col_topic, "")) if col_topic else "")
+        dates = _parse_session_dates(session)
+        date = ", ".join(dates) if dates else ""
+
+        dedupe_key = (participant_id, title, date)
+        if dedupe_key in seen_trainings:
+            continue
+        seen_trainings.add(dedupe_key)
+
+        trainings.append(
+            Training(
+                training_id="",
+                participant_id=participant_id,
+                participant_name=p.name,
+                title=title,
+                date=date,
+                organizer=organizer,
+                cpd_points=points,
+                hours="",
+                status="Registered",
+            )
+        )
+
+        pickup = _iso_date(row.get(col_pickup, "")) if col_pickup else ""
+        certificates.append(
+            Certificate(
+                certificate_id="",
+                participant_id=participant_id,
+                participant_name=p.name,
+                khmer_name=p.khmer_name,
+                training_title=date or title,
+                certificate_number="",
+                issued_date="",
+                picked_up=bool(pickup),
+                pickup_date=pickup,
+                pickup_by="",
+            )
+        )
+
+    return _dedup_participants(participants), trainings, certificates
 
 
 def load_dfs(
@@ -416,6 +556,7 @@ def load_real_data(data_dir: Path) -> tuple[list[Participant], list[Training], l
     """Load the real Google-Forms exports, or return None if not detected."""
     reg_path = None
     cert_path = None
+    transformed_path = None
     roots = [data_dir, data_dir / ".google"]
     for root in roots:
         if not root.exists():
@@ -424,12 +565,17 @@ def load_real_data(data_dir: Path) -> tuple[list[Participant], list[Training], l
             if path.name.startswith("~$"):
                 continue
             try:
-                if reg_path is None and _is_registration_file(path):
+                if transformed_path is None and _is_transformed_file(path):
+                    transformed_path = path
+                elif reg_path is None and _is_registration_file(path):
                     reg_path = path
                 elif cert_path is None and _is_certificate_file(path):
                     cert_path = path
             except Exception:  # noqa: BLE001 - skip files that cannot be read
                 continue
+
+    if transformed_path is not None:
+        return load_transformed(transformed_path)
 
     if reg_path is None and cert_path is None:
         return None

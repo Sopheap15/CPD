@@ -4,19 +4,22 @@ version = "0.1.0"
 description = "Bilingual (EN/KH) CPD tracking Telegram bot backed by Excel data"
 authors = ["CPD Track"]
 channels = ["conda-forge"]
-platforms = ["osx-64", "linux-64"]
+platforms = ["win-64", "osx-64", "linux-64"]
 
 [dependencies]
 python = "3.12.*"
 
 [pypi-dependencies]
-python-telegram-bot = ">=21.0"
+python-telegram-bot = { version = ">=21.0", extras = ["job-queue"] }
 pandas = ">=2.0"
 openpyxl = ">=3.1"
 python-dotenv = ">=1.0"
+bakong-khqr = { version = ">=0.5.0", extras = ["image"] }
 
 [tasks]
 start = "python main.py"
 test = "python -m unittest tests.test_flow -v"
 data = "python scripts/generate_dummy_data.py"
-lint = "python -m py_compile main.py cpd/*.py scripts/*.py"
+export = "python scripts/export_data.py"
+test-worker = "python scripts/test_worker_logic.py"
+lint = "python -m py_compile main.py cpd/*.py scripts/*.py worker/*.py"
