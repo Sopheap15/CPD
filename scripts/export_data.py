@@ -3,7 +3,7 @@
 Cloudflare Python Workers run on Pyodide, which does not have pandas or
 openpyxl, so the Excel files cannot be read on the server. Instead this script
 runs locally (where pandas/openpyxl are available), reuses the exact same
-parsing logic as the polling bot (cpd.data_loader), and writes a single
+parsing logic as the polling bot (cpd.services.data_loader), and writes a single
 ``worker/data.json`` file. You upload that file to Cloudflare KV and the
 Worker serves it.
 
@@ -32,7 +32,7 @@ os.environ["GS_ID_C"] = ""
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from cpd.data_loader import CpdData  # noqa: E402
+from cpd.services.data_loader import CpdData  # noqa: E402
 
 OUT_FILE = ROOT / "worker" / "data.json"
 

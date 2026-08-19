@@ -47,10 +47,10 @@ Notes:
 - Dates should be Excel date cells or text `YYYY-MM-DD`.
 - **Files are auto-reloaded** when changed, so you can edit them while the bot runs.
 
-Generate dummy data (already generated during setup):
+Generate dummy data (optional, for development):
 
 ```bash
-pixi run data
+pixi run export
 ```
 
 ## Course groups
@@ -160,8 +160,7 @@ cp .env.example .env
 # 3. Install the environment (downloads Python + libraries)
 pixi install
 
-# 4. Put your real Excel files in data/ (or generate sample data)
-pixi run data
+# 4. Put your real Excel files in data/
 ```
 
 ## Setup (Windows)
@@ -178,8 +177,7 @@ Copy-Item .env.example .env
 # 3. Install the environment
 pixi install
 
-# 4. Put your real Excel files in data/ (or generate sample data)
-pixi run data
+# 4. Put your real Excel files in data/
 ```
 
 Alternative: run everything through Windows Subsystem for Linux (WSL) and follow
@@ -228,21 +226,20 @@ Windows (PowerShell) / macOS-Linux (`run.ps1` / `run.sh`):
 | Command               | What it does                                              |
 | --------------------- | --------------------------------------------------------- |
 | `.\run.ps1 export`    | Rebuild `worker/data.json` from the Excel files           |
-| `.\run.ps1 test-worker` | Run the Cloudflare Worker logic tests                   |
 | `.\run.ps1 lint`      | Compile-check all Python files                            |
 | `pixi run start`      | Same as `run.ps1 start` (foreground)                      |
 
 ## Tests
 
-The main verification is the Worker logic test (search + report formatting):
+Run a compile check across every Python file:
 
 macOS / Linux:
 ```bash
-./run.sh test-worker
+./run.sh lint
 ```
 Windows:
 ```powershell
-.\run.ps1 test-worker
+.\run.ps1 lint
 ```
 
 ## Commands
@@ -262,20 +259,31 @@ All other admin commands are listed under "Admin commands" above.
 
 ```
 cpd/
-  bot.py           # Telegram handlers, conversation, menu, in-bot registration + payment flow
+  bot.py           # application assembly, conversation wiring, background jobs
   config.py        # token + path + Bakong configuration
-  data_loader.py   # Excel reading, caching, auto-reload, registration merge
-  registrations.py # in-bot course registration storage (CSV, incl. payment fields)
-  payments.py      # Bakong KHQR generation + payment verification
-  course_groups.py # course -> Telegram group mapping (course_groups.json)
-  search.py        # fuzzy name matching
-  formatter.py     # report rendering (bilingual)
-  real_data.py     # parses the master "Transformed ... with Certificates" workbook
+  constants.py     # shared conversation-state constants
   i18n.py          # all translatable strings (EN/KH)
-  storage.py       # Telegram-ID <-> participant-name links
+  handlers/        # Telegram conversation handlers
+    start.py       #   /start entry point + main-menu callbacks
+    history.py     #   CPD history lookup + report menus
+    registration.py#   course registration + Bakong payment flow
+    groups.py      #   course-group invite links + admin setup nudges
+    admin.py       #   admin-only commands
+    common.py      #   shared helpers (keyboards, data access, replies)
+  services/        # business logic (no telegram imports)
+    data_loader.py #   Excel reading, caching, auto-reload, registration merge
+    registrations.py # in-bot course registration storage (CSV, incl. payment fields)
+    payments.py    #   Bakong KHQR generation + payment verification
+    bakong_token.py#   Bakong developer-token renewal
+    course_groups.py # course -> Telegram group mapping (course_groups.json)
+    search.py      #   fuzzy name matching
+    formatter.py   #   report rendering (bilingual)
+    real_data.py   #   parses the master "Transformed ... with Certificates" workbook
+    google_sheets.py # live Google Sheets fetch (optional)
+    storage.py     #   Telegram-ID <-> participant-name links
 data/              # Excel data files + in_bot_registrations.csv + telegram_links.json
 worker/            # Cloudflare Worker port (entry.py, data.json, wrangler.jsonc)
-scripts/           # export_data.py, test_worker_logic.py, generate_dummy_data.py
+scripts/           # export_data.py, renew_bakong_token.py
 pixi.toml          # environment definition (Python + libraries)
 run.sh             # launcher for macOS/Linux
 run.ps1            # launcher for Windows
@@ -285,7 +293,7 @@ run.ps1            # launcher for Windows
 
 - **New languages / texts**: edit `cpd/i18n.py` — every message has an English and a
   Khmer version.
-- **New Excel sheet**: add a loader in `cpd/data_loader.py` and add a menu action
-  in `cpd/bot.py` + a report in `cpd/formatter.py`.
+- **New Excel sheet**: add a loader in `cpd/services/data_loader.py`, add a menu
+  action in `cpd/handlers/history.py` and a report in `cpd/services/formatter.py`.
 - **Move to a real database later**: replace `CpdData` in `data_loader.py` with the
   same interface (`.participants`, `.trainings_for(...)`, `.certificates_for(...)`).

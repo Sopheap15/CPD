@@ -12,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from cpd.bakong_token import main  # noqa: E402
+from cpd.services.bakong_token import main  # noqa: E402
 
 
 if __name__ == "__main__":

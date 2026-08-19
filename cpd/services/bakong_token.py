@@ -8,7 +8,7 @@ restarts.
 
 Typical usage::
 
-    from cpd import bakong_token
+    from cpd.services import bakong_token
     renewed, message = bakong_token.renew_if_due()
 """
 
@@ -113,7 +113,7 @@ def renew_if_due(min_days: int | None = None) -> tuple[bool, str]:
     Returns ``(renewed, message)``. ``renewed`` is True when a new token was
     fetched and applied (in memory and written to ``.env``).
     """
-    from cpd import payments
+    from cpd.services import payments
 
     min_days = min_days if min_days is not None else BAKONG_TOKEN_RENEW_DAYS
     current = payments.get_token()

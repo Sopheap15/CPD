@@ -4,3 +4,10 @@ __pycache__/
 .venv/
 venv/
 .DS_Store
+*.log
+data/cpd.err
+data/cpd.out
+data/cpd.watchdog.log
+worker/bot.log
+worker/bot.err.log
+~$*.xlsx

@@ -216,7 +216,7 @@ class CpdData:
                 continue
             for path in sorted(root.glob("*.xlsx")):
                 mtimes[str(path)] = int(path.stat().st_mtime)
-        from cpd.registrations import REGISTRATIONS_FILE
+        from cpd.services.registrations import REGISTRATIONS_FILE
         if REGISTRATIONS_FILE.exists():
             mtimes[str(REGISTRATIONS_FILE)] = int(REGISTRATIONS_FILE.stat().st_mtime)
         return mtimes
@@ -226,14 +226,14 @@ class CpdData:
         import hashlib
         import time
 
-        from cpd import google_sheets
+        from cpd.services import google_sheets
         from cpd.config import (
             GS_ID_R,
             GS_ID_C,
             GOOGLE_SHEET_REFRESH_MINUTES,
             GOOGLE_SHEET_SHEET_NAMES,
         )
-        from cpd.real_data import df_kind
+        from cpd.services.real_data import df_kind
 
         if not GS_ID_R:
             return False
@@ -320,7 +320,7 @@ class CpdData:
 
             # Prefer live Google Sheets tabs when they are configured.
             if self._google_reg_dfs or self._google_cert_dfs:
-                from cpd.real_data import load_dfs
+                from cpd.services.real_data import load_dfs
 
                 self.participants, self.trainings, self.certificates = load_dfs(
                     self._google_reg_dfs, self._google_cert_dfs
@@ -330,7 +330,7 @@ class CpdData:
                 return
 
             # Otherwise use the real Google-Forms xlsx exports when present.
-            from cpd.real_data import load_real_data
+            from cpd.services.real_data import load_real_data
 
             real = load_real_data(self._data_dir)
             if real is not None:
@@ -397,7 +397,7 @@ class CpdData:
 
     def _merge_registrations(self) -> None:
         """Merge in-bot course registrations into participants + trainings."""
-        from cpd.registrations import load_registrations
+        from cpd.services.registrations import load_registrations
 
         by_name: dict[str, Participant] = {}
         for p in self.participants:
@@ -497,7 +497,7 @@ class CpdData:
                     seen.add(id(t))
             
             # 2. Normalized match fallback
-            from cpd.search import normalize_name
+            from cpd.services.search import normalize_name
             norm_name = normalize_name(name)
             if not norm_name:
                 continue
@@ -531,7 +531,7 @@ class CpdData:
                     seen.add(id(c))
                     
             # 2. Normalized match fallback
-            from cpd.search import normalize_name
+            from cpd.services.search import normalize_name
             norm_name = normalize_name(name)
             if not norm_name:
                 continue

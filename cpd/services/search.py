@@ -6,10 +6,10 @@ import unicodedata
 from difflib import SequenceMatcher
 from typing import TYPE_CHECKING, Any, Iterable
 
-from cpd.data_loader import Participant
+from cpd.services.data_loader import Participant
 
 if TYPE_CHECKING:
-    from cpd.data_loader import CpdData
+    from cpd.services.data_loader import CpdData
 
 # Only offer alternatives when the best match is clearly better than the second.
 AUTO_SELECT_MARGIN = 0.25
@@ -131,7 +131,7 @@ def find_participant_by_secret(participants: list[Participant], secret: str) -> 
             return p
             
     # Try phone number match
-    from cpd.real_data import _norm_phone, _phone_tokens
+    from cpd.services.real_data import _norm_phone, _phone_tokens
     s_phone = _norm_phone(s)
     if s_phone:
         for p in participants:

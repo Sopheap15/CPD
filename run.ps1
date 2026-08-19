@@ -54,7 +54,6 @@ switch ($Command) {
     "stop"                       { Stop-Bot }
     "status"                     { Status-Bot }
     "export"                     { pixi run export }
-    "test-worker"                { pixi run test-worker }
     "lint"                       { pixi run lint }
     "shell"                      { pixi shell }
     "install"                    { pixi install }
@@ -67,7 +66,6 @@ Commands:
   stop    Stop a running bot
   status  Show whether the bot is running
   export  Rebuild worker/data.json from the Excel files
-  test-worker  Run the Cloudflare Worker logic tests
   lint    Compile-check all Python files
   shell   Open an interactive shell inside the pixi environment
   install Install the pixi environment (first time / after deps change)

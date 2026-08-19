@@ -18,8 +18,5 @@ bakong-khqr = { version = ">=0.5.0", extras = ["image"] }
 
 [tasks]
 start = "python main.py"
-test = "python -m unittest tests.test_flow -v"
-data = "python scripts/generate_dummy_data.py"
 export = "python scripts/export_data.py"
-test-worker = "python scripts/test_worker_logic.py"
-lint = "python -m py_compile main.py cpd/*.py scripts/*.py worker/*.py"
+lint = "python -m compileall -q main.py cpd scripts worker"

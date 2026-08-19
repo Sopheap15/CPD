@@ -1,0 +1,17 @@
+"""Shared constants for the Telegram conversation handlers."""
+
+# Conversation states
+START_OPTIONS = "START_OPTIONS"
+NAME = "NAME"
+MENU = "MENU"
+REG_IDENTITY = "REG_IDENTITY"
+REG_COURSE = "REG_COURSE"
+REG_LICENSE = "REG_LICENSE"
+REG_NAME = "REG_NAME"
+REG_PHONE = "REG_PHONE"
+REG_LOCATION = "REG_LOCATION"
+REG_PAYMENT = "REG_PAYMENT"
+
+UNKNOWN_CHAT_ID = "___"
+
+NL = "\n"

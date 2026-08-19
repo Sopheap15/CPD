@@ -25,8 +25,8 @@ from pathlib import Path
 
 import pandas as pd
 
-from cpd.data_loader import Certificate, Participant, Training, _norm
-from cpd.search import normalize_name
+from cpd.services.data_loader import Certificate, Participant, Training, _norm
+from cpd.services.search import normalize_name
 
 KHMER_DIGITS = str.maketrans("០១២៣៤៥៦៧៨៩", "0123456789")
 

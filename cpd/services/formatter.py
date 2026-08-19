@@ -12,7 +12,7 @@ from __future__ import annotations
 import html
 from typing import Iterable
 
-from cpd.data_loader import Certificate, Participant, Training
+from cpd.services.data_loader import Certificate, Participant, Training
 from cpd.i18n import inline, t
 
 NL = "\n"

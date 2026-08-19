@@ -1,2 +1,0 @@
-registered_at,telegram_id,name,participant_id,phone,location,course_id,course_title,course_date,cpd_points,fee,currency,bill_number,qr_md5,payment_status,paid_at,status
-2026-08-19 12:43:25,699463365,Oeng Sopheap,123456,012406388,Phnom Penh,C002,Role of pharmacy in hospital,2026-09-15,15,10.0,USD,CPDC002-699463365-118205,4c3f3fb9732205a2757b94d445594896,Unverified,2026-08-19 12:43:31,Pending payment

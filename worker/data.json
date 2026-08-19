@@ -3581,15 +3581,6 @@
    "department": "រាជធានីភ្នំពេញ",
    "email": "",
    "phone": "010 907 656"
-  },
-  {
-   "participant_id": "",
-   "name": "Eang Phanith",
-   "khmer_name": "",
-   "profession": "",
-   "department": "ភ្នំពេញ",
-   "email": "",
-   "phone": "098448619"
   }
  ],
  "trainings": [
@@ -12709,28 +12700,6 @@
    "date": "2026-08-07",
    "organizer": "ជុំទី ៣២",
    "cpd_points": "10",
-   "hours": "",
-   "status": "Registered"
-  },
-  {
-   "training_id": "",
-   "participant_id": "",
-   "participant_name": "Eang Phanith",
-   "title": "Role of pharmacy in hospital",
-   "date": "2026-09-15",
-   "organizer": "",
-   "cpd_points": "15",
-   "hours": "",
-   "status": "Registered"
-  },
-  {
-   "training_id": "",
-   "participant_id": "",
-   "participant_name": "Eang Phanith",
-   "title": "Pharmacovigilance Workshop",
-   "date": "2026-10-05",
-   "organizer": "",
-   "cpd_points": "5",
    "hours": "",
    "status": "Registered"
   }
