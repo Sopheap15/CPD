@@ -25,6 +25,76 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "Please enter your Phone Number or License ID to verify your account and view your CPD history.",
         "សូមបញ្ចូល លេខទូរស័ព្ទ ឬ លេខបញ្ជិកា របស់អ្នក ដើម្បីផ្ទៀងផ្ទាត់គណនី និងមើលប្រវត្តិ CPD របស់អ្នក។",
     ),
+    "pickup_ask_name": (
+        "Please enter the full name of the pharmacist whose certificate(s) you are here to pick up.",
+        "សូមបញ្ចូលឈ្មោះពេញរបស់ឱសថការី ដែលអ្នកមកទទួលវិញ្ញាបនបត្រ។",
+    ),
+    "pickup_name_not_found": (
+        "We could not find <b>{name}</b> in the system. Please check the "
+        "spelling and try again, or type the license number instead.",
+        "រកមិនឃើញ <b>{name}</b> នៅក្នុងប្រព័ន្ធ។ សូមពិនិត្យអក្ខរាវិរុទ្ធ រួចព្យាយាមម្តងទៀត ឬបញ្ចូលលេខអាជ្ញាបណ្ណជំនួសវិញ។",
+    ),
+    "pickup_who": (
+        "Who is collecting the certificate(s)?",
+        "តើអ្នកណាជាអ្នកមកទទួលវិញ្ញាបនបត្រ?",
+    ),
+    "pickup_self": ("The owner (myself)", "ម្ចាស់ខ្លួន"),
+    "pickup_other": ("Someone else", "អ្នកផ្សេង"),
+    "pickup_ask_picker": (
+        "Please enter the full name of the person who came to pick up the certificate(s).",
+        "សូមបញ្ចូលឈ្មោះពេញរបស់អ្នកដែលមកទទួលវិញ្ញាបនបត្រ។",
+    ),
+    "pickup_ask_course": (
+        "Which course certificate(s) are you collecting? Tap each course to "
+        "select it, then confirm. You can select more than one.",
+        "តើអ្នកមកទទួលវិញ្ញាបនបត្រនៃវគ្គណាខ្លះ? សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាល រួចបញ្ជាក់។ អ្នកអាចជ្រើសរើសបានច្រើន។",
+    ),
+    "pickup_confirm": (
+        "Confirm",
+        "បញ្ជាក់",
+    ),
+    "pickup_confirm_none": (
+        "Please select at least one course before confirming.",
+        "សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាលយ៉ាងហោចណាស់មួយ មុនពេលបញ្ជាក់។",
+    ),
+    "pickup_no_courses": (
+        "There are no completed courses to pick up certificates for.",
+        "មិនមានវិញ្ញាបនបត្រដែលត្រូវមកទទួលទេ។",
+    ),
+    "pickup_not_ready": (
+        "The certificate(s) for <b>{name}</b> are not ready yet:\n{courses}"
+        "Please check back later.",
+        "វិញ្ញាបនបត្ររបស់ <b>{name}</b> មិនទាន់រួចរាល់នៅឡើយ៖\n{courses}"
+        "សូមពិនិត្យម្តងទៀតនៅពេលក្រោយ។",
+    ),
+    "pickup_saved": (
+        "Certificate pickup recorded for <b>{name}</b> — {courses} at {time}.",
+        "បានកត់ត្រាការទទួលវិញ្ញាបនបត្រ {courses} របស់ <b>{name}</b> នៅម៉ោង {time}។",
+    ),
+    "pickup_saved_by": (
+        "Certificate pickup recorded for <b>{name}</b> — {courses} at {time}, received by <b>{by}</b>.",
+        "បានកត់ត្រាការទទួលវិញ្ញាបនបត្រ {courses} របស់ <b>{name}</b> នៅម៉ោង {time} ដោយ <b>{by}</b>។",
+    ),
+    "pickup_admin_alert": (
+        "📋 <b>Certificate pickup requested</b>\n\n"
+        "Trainee: <b>{name}</b>\n"
+        "Courses:\n{courses}"
+        "Time: {time}\n"
+        "Collected by: {by}\n"
+        "Entered by: {sender}\n\n"
+        "Please find and prepare the certificate(s) for the customer.",
+        "📋 <b>មានសំណើសុំដកវិញ្ញាបនបត្រ</b>\n\n"
+        "ឈ្មោះ: <b>{name}</b>\n"
+        "វគ្គ:\n{courses}"
+        "ម៉ោង: {time}\n"
+        "ទទួលដោយ: {by}\n"
+        "មកទទួលដោយ: {sender}\n\n"
+        "សូមស្វែងរក និងរៀបចំវិញ្ញាបនបត្រសម្រាប់អតិថិជន។",
+    ),
+    "pickup_cancel": (
+        "Pickup recording cancelled.",
+        "បានលុបចោលការកត់ត្រាការទទួលវិញ្ញាបនបត្រ។",
+    ),
     "ask_admin_view": (
         "Please enter the Name, Phone Number, or License ID of the person you want to view.",
         "សូមបញ្ចូល ឈ្មោះ, លេខទូរស័ព្ទ ឬ លេខបញ្ជិកា របស់អ្នកដែលអ្នកចង់មើល។",
@@ -60,6 +130,8 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
     ),
     "picked_up": ("Picked up", "បានទទួល"),
     "not_picked_up": ("Not picked up", "មិនទាន់ទទួល"),
+    "cert_ready": ("✅ Certificate ready", "✅ វិញ្ញាបនបត្ររួចរាល់"),
+    "cert_not_ready": ("⏳ Certificate not ready yet", "⏳ វិញ្ញាបនបត្រមិនទាន់រួចរាល់"),
     "not_applicable": ("-", "-"),
     "your_telegram_id": (
         "Your Telegram ID is: <code>{tid}</code>\nShare this with the admin if you have an account linking problem.",
@@ -94,10 +166,12 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "The CPD data files could not be loaded. Please contact the administrator.",
         "មិនអាចផ្ទុកឯកសារទិន្នន័យ CPD បានទេ។ សូមទាក់ទងអ្នកគ្រប់គ្រង។",
     ),
+    "view_history": ("View History", "មើលប្រវត្តិ"),
     "further_info": (
         "For further information, please contact CPD officer Eng Sophanith (+855 98 448 619).",
-        "សម្រាប់ព័ត៌មានបន្ថែម សូមទាក់ទង លោក អៀង សុផានិត (Telegram: +855 98 448 619)។",
+        "ព័ត៌មានបន្ថែម សូមទាក់ទងលោក អៀង សុផានិត (Telegram: +855 98 448 619)។",
     ),
+    "license_id": ("License ID", "លេខអាជ្ញាបណ្ណ"),
     "reg_pick_course": (
         "Please choose the course you want to register for:",
         "សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាលដែលអ្នកចង់ចុះឈ្មោះ៖",

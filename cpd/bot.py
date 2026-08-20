@@ -18,6 +18,10 @@ from telegram.ext import (
 from cpd.constants import (
     MENU,
     NAME,
+    PICKUP_COURSE,
+    PICKUP_NAME,
+    PICKUP_PICKER,
+    PICKUP_WHO,
     REG_COURSE,
     REG_IDENTITY,
     REG_LICENSE,
@@ -45,7 +49,13 @@ from cpd.handlers.admin import (
     cmd_admin_unlink,
     cmd_admin_view,
 )
-from cpd.handlers.history import on_menu, on_name, on_pick, cmd_view
+from cpd.handlers.history import on_menu, on_name, on_pick, on_alert_view, cmd_view
+from cpd.handlers.pickup import (
+    on_pickup_course,
+    on_pickup_name,
+    on_pickup_picker,
+    on_pickup_who,
+)
 from cpd.handlers.registration import (
     finalize_paid_registration,
     on_pay_cancel,
@@ -134,6 +144,7 @@ def build_application() -> Application:
         CommandHandler("view", cmd_view),
         CommandHandler("cancel", cmd_cancel),
         CallbackQueryHandler(on_pick, pattern=r"^pick\|"),
+        CallbackQueryHandler(on_alert_view, pattern=r"^alert\|view\|"),
         CallbackQueryHandler(on_start_option, pattern=r"^start\|"),
         CallbackQueryHandler(on_menu, pattern=r"^menu\|"),
     ]
@@ -175,6 +186,23 @@ def build_application() -> Application:
         CommandHandler("cancel", cmd_cancel),
     ]
 
+    pickup_name_handlers = [
+        MessageHandler(filters.TEXT & ~filters.COMMAND, on_pickup_name),
+        CommandHandler("cancel", cmd_cancel),
+    ]
+    pickup_who_handlers = [
+        CallbackQueryHandler(on_pickup_who, pattern=r"^pickup\|"),
+        CommandHandler("cancel", cmd_cancel),
+    ]
+    pickup_picker_handlers = [
+        MessageHandler(filters.TEXT & ~filters.COMMAND, on_pickup_picker),
+        CommandHandler("cancel", cmd_cancel),
+    ]
+    pickup_course_handlers = [
+        CallbackQueryHandler(on_pickup_course, pattern=r"^pickup\|(course\||confirm|cancel)"),
+        CommandHandler("cancel", cmd_cancel),
+    ]
+
     conversation = ConversationHandler(
         entry_points=[
             CommandHandler("start", cmd_start),
@@ -192,6 +220,10 @@ def build_application() -> Application:
             REG_LOCATION: reg_location_handlers,
             REG_PAYMENT: reg_payment_handlers,
             REG_RECEIPT: reg_receipt_handlers,
+            PICKUP_NAME: pickup_name_handlers,
+            PICKUP_WHO: pickup_who_handlers,
+            PICKUP_PICKER: pickup_picker_handlers,
+            PICKUP_COURSE: pickup_course_handlers,
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),

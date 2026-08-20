@@ -44,7 +44,7 @@ def participant_header(p: Participant) -> str:
     if details:
         lines.append(" | ".join(_esc(d) for d in details))
     if p.participant_id:
-        lines.append(f'ID: <code>{_esc(p.participant_id)}</code>')
+        lines.append(f'{_esc(inline("license_id"))}: <code>{_esc(p.participant_id)}</code>')
     return NL.join(lines)
 
 
@@ -131,15 +131,45 @@ def certificate_lines(
 
 
 def _cert_status_for_trainings(
-    trainings: list[Training], certificates: list[Certificate]
+    trainings: list[Training], certificates: list[Certificate],
+    courses: Iterable[Course] | None = None,
 ) -> list[str]:
-    """Show certificate pickup status only for trainings that have a pickup record.
+    """Show certificate status per attended course.
 
-    If nobody has come to pick up at all, return an empty list so the caller
-    can show t("no_certificate") instead.
+    For each training, look up the matching course (by title or date). If the
+    course's certificate is not ready yet, tell the participant it is not
+    ready. If a pickup record exists, show the pickup status as before.
     """
+    course_list = list(courses) if courses else []
+
+    def _course_for(training: Training) -> Course | None:
+        from cpd.services.search import normalize_name
+        t_title = normalize_name(training.title or "")
+        t_date = normalize_name(training.date or "")
+        for c in course_list:
+            c_title = normalize_name(c.title or "")
+            c_date = normalize_name(c.date or "")
+            if c_title and (c_title in t_title or t_title in c_title):
+                return c
+            if c_date and (c_date in t_date or t_date in c_date):
+                return c
+        return None
+
     if not certificates:
-        return []  # Nobody came to the office yet
+        # No one has come to pick up yet. Still report readiness for the
+        # attended courses so trainees know whether to come or wait.
+        lines = []
+        for tr in sorted(trainings, key=lambda tr: tr.date or "", reverse=True):
+            course = _course_for(tr)
+            if course is None:
+                continue
+            title = course.title if course.title else _date(tr.date)
+            if course.certificate_ready:
+                status = inline("cert_ready")
+            else:
+                status = inline("cert_not_ready")
+            lines.append(f"• <b>{_esc(status)}</b> · {_esc(title)}")
+        return lines
 
     lines = []
     for c in sorted(certificates, key=lambda c: c.training_title or "", reverse=True):
@@ -216,6 +246,7 @@ def summary_sections(
     p: Participant,
     trainings: Iterable[Training],
     certificates: Iterable[Certificate],
+    courses: Iterable[Course] | None = None,
 ) -> list[str]:
     """Return the full report as a list of standalone messages."""
     head = [participant_header(p), ""] + _counts(trainings, certificates)
@@ -230,7 +261,7 @@ def summary_sections(
     else:
         sections.append(NL + section_heading("section_training") + NL + t("no_training"))
 
-    cert_lines = _cert_status_for_trainings(trainings, certificates)
+    cert_lines = _cert_status_for_trainings(trainings, certificates, courses)
     if cert_lines:
         cert_text = NL.join(cert_lines)
     else:

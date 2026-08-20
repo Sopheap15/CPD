@@ -10,7 +10,6 @@ from telegram.ext import ContextTypes
 
 from cpd.constants import MENU, NAME, NL
 from cpd.services.formatter import (
-    certificate_report,
     summary_sections,
 )
 from cpd.handlers.common import (
@@ -116,6 +115,16 @@ async def on_pick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     return await show_summary(update, context, name, edit=False)
 
 
+async def on_alert_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """'View History' button on the admin pickup alert."""
+    query = update.callback_query
+    if query is None:
+        return MENU
+    await query.answer()
+    name = query.data.split("|", 2)[2]
+    return await show_summary(update, context, name, edit=True)
+
+
 async def on_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | None:
     query = update.callback_query
     if query is None:
@@ -135,33 +144,6 @@ async def on_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | N
     return MENU
 
 
-async def show_certificates(update: Update, context: ContextTypes.DEFAULT_TYPE,
-                            name: str, edit: bool = False) -> str:
-    from cpd.handlers.common import _cpd
-
-    data = _cpd(context)
-    participant = _resolve_for_name(data, name)
-
-    context.user_data["name"] = participant.name
-    certificates = data.certificates_for(participant.participant_id,
-                                         participant.name, participant.khmer_name)
-    text = certificate_report(participant.name, certificates)
-
-    try:
-        if edit:
-            await update.callback_query.edit_message_text(
-                text, parse_mode="HTML", reply_markup=menu_keyboard()
-            )
-            return MENU
-        await update.effective_message.reply_html(
-            text, reply_markup=menu_keyboard()
-        )
-    except Exception as exc:  # noqa: BLE001
-        logger.warning("Failed to send certificates for %r: %r", name, exc)
-        await safe_reply_html(update, t("error"))
-    return MENU
-
-
 async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE,
                        name: str, edit: bool = False) -> str:
     from cpd.handlers.common import _cpd
@@ -175,7 +157,7 @@ async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE,
     certificates = data.certificates_for(participant.participant_id,
                                          participant.name, participant.khmer_name)
 
-    sections = summary_sections(participant, trainings, certificates)
+    sections = summary_sections(participant, trainings, certificates, data.courses)
     text = NL.join(sections)
 
     def _markup():

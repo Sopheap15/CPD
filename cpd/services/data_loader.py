@@ -85,7 +85,15 @@ class Course:
     cpd_points: str = ""
     link: str = ""
     status: str = ""
+    certificate_status: str = ""
     fee: float = 0.0
+
+    @property
+    def certificate_ready(self) -> bool:
+        """True when the certificate for this course is ready for pickup."""
+        return (self.certificate_status or "").strip().lower() in (
+            "ready", "yes", "រួចរាល់",
+        )
 
 
 @dataclass
@@ -183,6 +191,65 @@ def _read_sheet(path: Path, column_map: dict[str, str]) -> pd.DataFrame:
         elif "date" in col:
             df[col] = df[col].astype(str)
     return df
+
+
+def _apply_pickup_to_certificates(
+    certificates: list,
+    participant_name: str,
+    course_id: str,
+    course_title: str,
+    course_date: str,
+    pickup_at: str,
+    pickup_by: str,
+) -> None:
+    """Mark the matching certificate(s) of a participant as picked up.
+
+    Pickup rows from in_bot_registrations.csv carry the pharmacist's name and
+    the course being collected. We look for certificates belonging to that
+    participant whose training date (training_title) or title matches the
+    course, so the pickup is reflected in their certificate report. If no
+    specific course matches, the pickup is applied to every outstanding
+    certificate of the participant.
+    """
+    name_key = (participant_name or "").strip().lower()
+    if not name_key:
+        return
+
+    title_key = (course_title or "").strip().lower()
+    course_key = (course_id or "").strip().lower()
+    date_key = (course_date or "").strip()
+
+    candidates = [
+        c for c in certificates
+        if (c.participant_name or "").strip().lower() == name_key
+        or (c.khmer_name or "").strip().lower() == name_key
+    ]
+    if not candidates:
+        return
+
+    matched = []
+    for c in candidates:
+        if c.picked_up:
+            continue
+        c_title = (c.training_title or "").strip().lower()
+        c_date = (c.training_title or "").strip()
+        if date_key and (c_date == date_key or c_date.startswith(date_key)
+                         or date_key.startswith(c_date)):
+            matched.append(c)
+        elif title_key and (title_key in c_title or c_title in title_key):
+            matched.append(c)
+        elif course_key and (course_key in c_title or c_title in course_key):
+            matched.append(c)
+
+    if not matched:
+        matched = [c for c in candidates if not c.picked_up]
+
+    for c in matched:
+        c.picked_up = True
+        if pickup_at:
+            c.pickup_date = pickup_at
+        if pickup_by:
+            c.pickup_by = pickup_by
 
 
 class CpdData:
@@ -319,6 +386,9 @@ class CpdData:
                             cpd_points=_norm(row.get("cpd_points", "")),
                             link=_norm(row.get("link", "")),
                             status=_norm(row.get("status", "")),
+                            certificate_status=_norm(
+                                row.get("certificate_status",
+                                        row.get("cert_ready", ""))),
                             fee=_parse_fee(row.get("fee", 0)),
                         )
                     )
@@ -436,6 +506,25 @@ class CpdData:
             course_title = (reg.get("course_title") or "").strip()
             course_date = (reg.get("course_date") or "").strip()
             points = (reg.get("cpd_points") or "").strip()
+
+            if (reg.get("status") or "").strip() == "Picked up":
+                # Pickup rows record that a certificate was collected. Apply
+                # the pickup to the matching certificate instead of creating a
+                # training record.
+                _apply_pickup_to_certificates(
+                    self.certificates, p.name,
+                    course_id=(reg.get("course_id") or "").strip(),
+                    course_title=course_title,
+                    course_date=course_date,
+                    pickup_at=(reg.get("pickup_at") or "").strip(),
+                    pickup_by=(reg.get("pickup_by") or "").strip(),
+                )
+                continue
+
+            if not course_title and not (reg.get("course_id") or "").strip():
+                # Legacy pickup-only rows carry no course, so they must not
+                # create a bogus training record.
+                continue
             self.trainings.append(
                 Training(
                     participant_id=p.participant_id,

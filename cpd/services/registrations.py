@@ -33,6 +33,8 @@ REGISTRATION_COLUMNS = [
     "bill_number",
     "payment_ref",
     "status",
+    "pickup_at",
+    "pickup_by",
 ]
 
 
@@ -84,7 +86,47 @@ def append_registration(record: dict) -> None:
         writer = csv.DictWriter(fh, fieldnames=REGISTRATION_COLUMNS)
         if new_file:
             writer.writeheader()
+        elif not _file_ends_with_newline():
+            # csv module writes with its own line terminator; a file that was
+            # hand-edited (or left without a trailing newline) would otherwise
+            # merge this row onto the previous line.
+            fh.write("\r\n")
         writer.writerow(row)
+
+
+def _file_ends_with_newline() -> bool:
+    """True when the CSV file's last byte is a line terminator."""
+    try:
+        with open(REGISTRATIONS_FILE, "rb") as fh:
+            fh.seek(0, 2)
+            size = fh.tell()
+            if size < 1:
+                return True
+            fh.seek(-1, 2)
+            return fh.read(1) in (b"\n", b"\r")
+    except Exception:
+        return True
+
+
+def append_pickup(name: str, pickup_by: str = "",
+                  course_id: str = "", course_title: str = "",
+                  course_date: str = "") -> None:
+    """Record a certificate pickup visit against a pharmacist name + course.
+
+    The pickup is stored in the same CSV as registrations (which already holds
+    the pharmacist's name). A trainee may wait until several certificates are
+    ready and collect them in one visit, so the course being collected is
+    recorded to make it clear which certificate was picked up.
+    """
+    append_registration({
+        "name": (name or "").strip(),
+        "course_id": (course_id or "").strip(),
+        "course_title": (course_title or "").strip(),
+        "course_date": (course_date or "").strip(),
+        "status": "Picked up",
+        "pickup_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "pickup_by": (pickup_by or "").strip(),
+    })
 
 
 def load_registrations() -> list[dict]:

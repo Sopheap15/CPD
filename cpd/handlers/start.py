@@ -40,6 +40,12 @@ async def on_start_option(update: Update,
     if action == "view_cpd":
         from cpd.handlers.history import show_summary
         from cpd.services.storage import get_linked_name
+
+        last_name = context.user_data.get("last_view_name")
+        if last_name:
+            context.user_data.pop("last_view_name", None)
+            return await show_summary(update, context, last_name, edit=True)
+
         if not _is_admin(update):
             linked_name = get_linked_name(update.effective_user.id)
             if linked_name:
@@ -47,15 +53,8 @@ async def on_start_option(update: Update,
         await query.edit_message_text(t("ask_verification"), parse_mode="HTML")
         return NAME
     if action == "certificate":
-        from cpd.handlers.history import show_certificates
-        from cpd.services.storage import get_linked_name
-        if not _is_admin(update):
-            linked_name = get_linked_name(update.effective_user.id)
-            if linked_name:
-                return await show_certificates(update, context, linked_name,
-                                               edit=True)
-        await query.edit_message_text(t("ask_verification"), parse_mode="HTML")
-        return NAME
+        from cpd.handlers.pickup import start_pickup
+        return await start_pickup(update, context)
     elif action == "register":
         # Returning / recognized users go straight to the course list.
         from cpd.handlers.registration import (
