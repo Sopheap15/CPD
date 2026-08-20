@@ -186,6 +186,7 @@ def build_application() -> Application:
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),
+            CommandHandler("start", cmd_start),
         ],
     )
 

@@ -108,10 +108,20 @@ Registration fees are paid by scanning a KHQR code with the **Bakong** app:
 6. If no `BAKONG_ACCOUNT_ID` is present, registrations are saved without
    payment and the admin can collect fees manually.
 
-### Token renewal
+### Getting / renewing the token
 
-Bakong Open API tokens are valid for ~90 days. To stop manually pasting new
-tokens from the portal:
+Bakong Open API tokens are valid for ~90 days. The first time you use an email,
+you must complete Bakong's two-step registration once (this is why a plain
+renewal says *"Your API token will be emailed to you within 24 hours"*):
+
+```bash
+pixi run python scripts/bakong_token_setup.py
+```
+
+It asks Bakong to email a verification code to your registered address, then
+swaps that code for a token and writes it into `.env` (`BAKONG_TOKEN`).
+
+After that first registration, renewal is automatic:
 
 1. Set `BAKONG_EMAIL` in `.env` to the email you registered with on
    https://api-bakong.nbc.gov.kh/register.
@@ -283,7 +293,7 @@ cpd/
     storage.py     #   Telegram-ID <-> participant-name links
 data/              # Excel data files + in_bot_registrations.csv + telegram_links.json
 worker/            # Cloudflare Worker port (entry.py, data.json, wrangler.jsonc)
-scripts/           # export_data.py, renew_bakong_token.py
+scripts/           # export_data.py, renew_bakong_token.py, bakong_token_setup.py
 pixi.toml          # environment definition (Python + libraries)
 run.sh             # launcher for macOS/Linux
 run.ps1            # launcher for Windows

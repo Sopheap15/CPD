@@ -59,6 +59,82 @@ def _get_khqr():
         return _khqr
 
 
+def _normalize_qr(qr: str, amount: float, currency: str) -> str:
+    """Make the KHQR payload maximally compatible and recompute the CRC.
+
+    The bundled library trims the amount to ``"10"`` (no decimal separator)
+    and emits tag 99 with a 1-day expiration. Some bank apps (e.g. ABA) parse
+    the amount strictly per EMVCo and expect the decimal separator for USD
+    (``"10.00"``), and Bakong's integration guide requires the QR to expire
+    within 10 minutes. This walks the top-level tags, reformats tag 54,
+    shortens tag 99's expiration to 10 minutes, and recomputes the CRC.
+    """
+    import time as _time
+    from bakong_khqr.sdk.crc import CRC
+
+    if currency.upper() == "USD":
+        amount_str = f"{amount:.2f}"
+    else:
+        amount_str = f"{amount:.0f}"
+
+    expiry_ms = str((_time.time() + 600) * 1000).split(".")[0]
+    if len(expiry_ms) > 13:
+        expiry_ms = expiry_ms[:13]
+
+    i = 0
+    parts = []
+    while i < len(qr):
+        tag = qr[i:i + 2]
+        if tag == "63":
+            break
+        length = int(qr[i + 2:i + 4])
+        value = qr[i + 4:i + 4 + length]
+        if tag == "54":
+            value = amount_str
+        elif tag == "99":
+            value = _rewrite_expiration(value, expiry_ms)
+        elif tag == "62":
+            value = _sort_subtags(value)
+        parts.append(f"{tag}{len(value):02d}{value}")
+        i += 4 + length
+    body = "".join(parts)
+    return body + CRC().value(body)
+
+
+def _sort_subtags(template_value: str) -> str:
+    """Reorder sub-tags inside a template (tag 62 etc.) in ascending order.
+
+    The bundled library emits additional-data sub-tags as 03, 02, 01, 07, but
+    EMVCo requires ascending order (01, 02, 03, 07, 08). Strict parsers (e.g.
+    ABA) validate the ordering; lenient ones (e.g. ACLEDA) tolerate it.
+    """
+    items = []
+    j = 0
+    while j < len(template_value):
+        sub_tag = template_value[j:j + 2]
+        sub_len = int(template_value[j + 2:j + 4])
+        sub_val = template_value[j + 4:j + 4 + sub_len]
+        items.append((sub_tag, sub_val))
+        j += 4 + sub_len
+    items.sort(key=lambda x: x[0])
+    return "".join(f"{t}{len(v):02d}{v}" for t, v in items)
+
+
+def _rewrite_expiration(tag99_value: str, expiry_ms: str) -> str:
+    """Replace tag 99's expiration sub-tag (01) value, keeping its timestamp."""
+    j = 0
+    sub_parts = []
+    while j < len(tag99_value):
+        sub_tag = tag99_value[j:j + 2]
+        sub_len = int(tag99_value[j + 2:j + 4])
+        sub_val = tag99_value[j + 4:j + 4 + sub_len]
+        if sub_tag == "01":
+            sub_val = expiry_ms
+        sub_parts.append(f"{sub_tag}{len(sub_val):02d}{sub_val}")
+        j += 4 + sub_len
+    return "".join(sub_parts)
+
+
 def _qr_merchant_name(course) -> str:
     """Merchant name shown on the QR: the course title (max 25 chars).
 
@@ -136,6 +212,7 @@ def create_payment(chat_id: int, telegram_id: int, course,
         static=False,
         expiration=1,
     )
+    qr = _normalize_qr(qr, fee, BAKONG_CURRENCY)
     md5 = khqr.generate_md5(qr)
     image_path = khqr.qr_image(qr, format="png")
 

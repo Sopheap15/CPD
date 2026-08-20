@@ -5,6 +5,7 @@ from __future__ import annotations
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
 from cpd.config import BAKONG_CURRENCY
@@ -428,7 +429,10 @@ async def on_pay_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> s
     chat_id = update.effective_chat.id
     drop_payment(chat_id)
     clear_registration_state(context)
-    await query.edit_message_text(t("cancel"), parse_mode="HTML")
+    try:
+        await query.edit_message_text(t("cancel"), parse_mode="HTML")
+    except BadRequest:
+        await query.edit_message_caption(caption=t("cancel"), parse_mode="HTML")
     await send_start_message(context, chat_id)
     return START_OPTIONS
 

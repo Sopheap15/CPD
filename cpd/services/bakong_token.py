@@ -1,15 +1,16 @@
-"""Bakong developer-token renewal.
+"""Bakong developer-token acquisition and renewal.
 
-Bakong Open API tokens are valid for ~90 days. Rather than pasting a fresh
-token from the developer portal every time, this module renews it via the
-official ``POST /v1/renew_token`` endpoint (which only needs the registered
-email) and stores it back into ``.env`` so the bot keeps working across
-restarts.
+First-time registration is a two-step flow (the ``renew_token`` endpoint only
+works once the email has been registered and verified)::
 
-Typical usage::
+    1. POST /v1/request_token  {email, organization, project}
+       -> Bakong emails a verification code to the address.
+    2. POST /v1/verify         {code}
+       -> returns the JWT token (kept ~90 days).
 
-    from cpd.services import bakong_token
-    renewed, message = bakong_token.renew_if_due()
+From then on ``POST /v1/renew_token {email}`` returns a fresh token directly,
+which this module uses both on demand (:func:`renew_if_due`) and from the bot's
+background job. Tokens are stored in ``.env`` so they survive restarts.
 """
 
 from __future__ import annotations
@@ -21,6 +22,72 @@ import urllib.error
 import urllib.request
 
 from cpd.config import BAKONG_BASE_URL, BAKONG_EMAIL, BAKONG_TOKEN_RENEW_DAYS, BASE_DIR
+
+
+def _post(base_url: str, endpoint: str, payload: dict) -> dict:
+    """POST JSON to a Bakong API endpoint and return the parsed response."""
+    req = urllib.request.Request(
+        f"{base_url.rstrip('/')}/{endpoint}",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={"Content-Type": "application/json", "Accept": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=45) as resp:
+            body = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read().decode("utf-8", errors="replace")[:300]
+        raise ValueError(f"Bakong {endpoint} HTTP {exc.code}: {detail}") from exc
+    except urllib.error.URLError as exc:
+        raise ValueError(f"Bakong {endpoint} unreachable: {exc}") from exc
+    if not isinstance(body, dict):
+        raise ValueError(f"Bakong {endpoint} returned unexpected data: {body!r}")
+    return body
+
+
+def request_token(email: str, organization: str, project: str,
+                  base_url: str | None = None) -> str:
+    """Step 1: ask Bakong to email a verification code for *email*.
+
+    Returns Bakong's human-readable response message (usually something like
+    "A verification code has been sent to your email").
+    """
+    base_url = (base_url or BAKONG_BASE_URL or "").strip()
+    if not email.strip() or not organization.strip() or not project.strip():
+        raise ValueError("email, organization and project are all required.")
+    body = _post(base_url, "v1/request_token", {
+        "email": email.strip(),
+        "organization": organization.strip(),
+        "project": project.strip(),
+    })
+    if body.get("responseCode") not in (None, 0, "0"):
+        raise ValueError(
+            f"Bakong request_token failed: "
+            f"{body.get('responseCode')} {body.get('responseMessage') or body}"
+        )
+    return str(body.get("responseMessage") or "Verification code sent to email.")
+
+
+def verify_token(code: str, base_url: str | None = None) -> str:
+    """Step 2: exchange the emailed verification *code* for a JWT token."""
+    base_url = (base_url or BAKONG_BASE_URL or "").strip()
+    code = (code or "").strip()
+    if not code:
+        raise ValueError("The verification code from the email is required.")
+    body = _post(base_url, "v1/verify", {"code": code})
+    if body.get("responseCode") not in (None, 0, "0"):
+        raise ValueError(
+            f"Bakong verify failed: "
+            f"{body.get('responseCode')} {body.get('responseMessage') or body}"
+        )
+    token = ""
+    if isinstance(body.get("data"), dict):
+        token = str(body["data"].get("token") or "").strip()
+    if not token:
+        token = str(body.get("token") or "").strip()
+    if not token:
+        raise ValueError(f"Bakong verify returned no token: {body!r}")
+    return token
 
 
 def renew_token(email: str | None = None, base_url: str | None = None) -> str:
@@ -37,32 +104,16 @@ def renew_token(email: str | None = None, base_url: str | None = None) -> str:
             "automatic token renewal."
         )
     base_url = (base_url or BAKONG_BASE_URL or "").rstrip("/")
-    payload = json.dumps({"email": email}).encode("utf-8")
-    req = urllib.request.Request(
-        f"{base_url}/v1/renew_token",
-        data=payload,
-        headers={"Content-Type": "application/json", "Accept": "application/json"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=45) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-    except urllib.error.HTTPError as exc:
-        detail = exc.read().decode("utf-8", errors="replace")[:300]
-        raise ValueError(f"Bakong renew_token HTTP {exc.code}: {detail}") from exc
-    except urllib.error.URLError as exc:
-        raise ValueError(f"Bakong renew_token unreachable: {exc}") from exc
+    body = _post(base_url, "v1/renew_token", {"email": email})
 
-    if isinstance(body, dict) and body.get("responseCode") not in (None, 0, "0"):
+    if body.get("responseCode") not in (None, 0, "0"):
         raise ValueError(
             f"Bakong renew_token failed: "
             f"{body.get('responseCode')} {body.get('responseMessage') or body}"
         )
-    token = ""
-    if isinstance(body, dict):
-        token = str(body.get("token") or "").strip()
-        if not token and isinstance(body.get("data"), dict):
-            token = str(body["data"].get("token") or "").strip()
+    token = str(body.get("token") or "").strip()
+    if not token and isinstance(body.get("data"), dict):
+        token = str(body["data"].get("token") or "").strip()
     if not token:
         raise ValueError(f"Bakong renew_token returned no token: {body!r}")
     return token
@@ -125,7 +176,14 @@ def renew_if_due(min_days: int | None = None) -> tuple[bool, str]:
     try:
         token = renew_token()
     except ValueError as exc:
-        return False, f"Renewal skipped: {exc}"
+        msg = str(exc)
+        if "will be emailed" in msg or "not yet" in msg:
+            return False, (
+                "Bakong says this email is not verified yet. Run "
+                "`pixi run python scripts/bakong_token_setup.py` to complete "
+                f"registration (request code -> verify). ({msg})"
+            )
+        return False, f"Renewal skipped: {msg}"
 
     payments.set_token(token)
     write_token_to_env(token)
