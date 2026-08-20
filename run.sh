@@ -51,7 +51,6 @@ case "${1:-start}" in
   stop)      cmd_stop ;;
   status)    if is_running; then echo "Running (PID: $(bot_pids | tr '\n' ' '))"; else echo "Not running."; fi ;;
   test)      echo "No test suite configured; use: ./run.sh lint" ;;
-  export)    exec pixi run export ;;
   lint)      exec pixi run lint ;;
   shell)     exec pixi shell ;;
   install)   exec pixi install ;;
@@ -63,7 +62,6 @@ Commands:
   start   (default) Run the Telegram bot
   stop    Stop a running bot
   status  Show whether the bot is running
-  export  Rebuild worker/data.json from the Excel files
   lint    Compile-check all Python files
   shell   Open an interactive shell inside the pixi environment
   install Install the pixi environment (first time / after deps change)

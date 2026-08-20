@@ -9,8 +9,8 @@ from __future__ import annotations
 # Each entry: key -> (english, khmer)
 TRANSLATIONS: dict[str, tuple[str, str]] = {
     "welcome": (
-        "Welcome! What can I help you?",
-        "សូមស្វាគមន៍! តើមានអ្វីដែលខ្ញុំអាចជួយអ្នកបានទេ?",
+        "Welcome! Please choose a service.",
+        "សូមស្វាគមន៍! សូមជ្រើសរើសសេវាកម្ម",
     ),
     "ask_name": (
         "Please enter your full name to view your CPD history (e.g. Sokha Chan).",
@@ -107,8 +107,8 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "អ្នកបានចុះឈ្មោះសម្រាប់វគ្គនេះរួចហើយ។",
     ),
     "reg_ask_identity": (
-        "Please enter your pharmacist license number or full name.",
-        "សូមបញ្ចូលលេខបញ្ជិកាឱសថការី ឬឈ្មោះពេញរបស់អ្នក។",
+        "Please enter your full name.",
+        "សូមបញ្ចូលឈ្មោះពេញរបស់អ្នក។",
     ),
     "reg_ask_license": (
         "Please enter your pharmacist license number (លេខបញ្ជិកាឱសថការី).",
@@ -128,16 +128,16 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
     ),
     "reg_confirm_old": (
         "Registered for course {course}.\nName: {name}\nLicense: {license}\n"
-        "Telegram ID: {telegram_id}\nDate: {date}",
+        "Date: {date}",
         "បានចុះឈ្មោះវគ្គ {course} ដោយជោគជ័យ។\nឈ្មោះ៖ {name}\nលេខបញ្ជិកា៖ {license}\n"
-        "Telegram ID៖ {telegram_id}\nកាលបរិច្ឆេទ៖ {date}",
+        "កាលបរិច្ឆេទ៖ {date}",
     ),
     "reg_confirm_new": (
         "Registered for course {course}.\nName: {name}\nLicense: {license}\n"
-        "Phone: {phone}\nLocation: {location}\nTelegram ID: {telegram_id}\n"
+        "Phone: {phone}\nPharmacist council member: {location}\n"
         "Date: {date}",
         "បានចុះឈ្មោះវគ្គ {course} ដោយជោគជ័យ។\nឈ្មោះ៖ {name}\nលេខបញ្ជិកា៖ {license}\n"
-        "ទូរស័ព្ទ៖ {phone}\nទីតាំង៖ {location}\nTelegram ID៖ {telegram_id}\n"
+        "ទូរស័ព្ទ៖ {phone}\nសមាជិកគណៈឱសថការី៖ {location}\n"
         "កាលបរិច្ឆេទ៖ {date}",
     ),
     "reg_join_group": (
@@ -281,12 +281,8 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "មិនមានក្រុមភ្ជាប់ជាមួយវគ្គ <b>{course}</b> ទេ។",
     ),
     "pay_intro": (
-        "Payment required for <b>{course}</b>\n\n"
-        "Amount: <b>{amount} {currency}</b>\n"
-        "Please scan the QR code below with your Bakong app to pay.",
-        "តម្រូវឲ្យបង់ប្រាក់សម្រាប់វគ្គ <b>{course}</b>\n\n"
-        "ចំនួនទឹកប្រាក់៖ <b>{amount} {currency}</b>\n"
-        "សូមស្កេន QR code ខាងក្រោមជាមួយកម្មវិធី Bakong ដើម្បីបង់ប្រាក់។",
+        "Please scan the QR code to pay <b>{amount} {currency}</b> for <b>{course}</b>.",
+        "សូមស្កេន QR code ដើម្បីបង់ប្រាក់ <b>{amount} {currency}</b> សម្រាប់វគ្គ <b>{course}</b>។",
     ),
     "pay_intro_auto": (
         "Once paid, tap <b>\"I have paid\"</b> or wait a moment - I will "
@@ -295,8 +291,8 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "ខ្ញុំនឹងបញ្ជាក់ដោយស្វ័យប្រវត្តិ។",
     ),
     "pay_check_button": (
-        "I have paid / Check payment",
-        "ខ្ញុំបានបង់ប្រាក់ហើយ / ពិនិត្យការបង់ប្រាក់",
+        "I have paid",
+        "ខ្ញុំបានបង់ប្រាក់ហើយ",
     ),
     "pay_cancel_button": (
         "Cancel registration",
@@ -309,11 +305,8 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "បន្ទាប់មកចុចប៊ូតុងម្តងទៀត។",
     ),
     "pay_manual_mode": (
-        "ℹ️ Automatic payment confirmation is being set up. After paying, "
-        "tap <b>\"I have paid\"</b> and an admin will confirm your "
-        "registration.",
-        "ℹ️ ការបញ្ជាក់ការបង់ប្រាក់ដោយស្វ័យប្រវត្តិកំពុងត្រូវបានរៀបចំ។ បន្ទាប់ពីបង់ប្រាក់រួច "
-        "សូមចុច <b>\"ខ្ញុំបានបង់ប្រាក់ហើយ\"</b> ហើយអ្នកគ្រប់គ្រងនឹងបញ្ជាក់ការចុះឈ្មោះរបស់អ្នក។",
+        "",
+        "",
     ),
     "pay_success": (
         "Payment confirmed! <b>{amount} {currency}</b> received for "
@@ -339,10 +332,10 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
     ),
     "reg_confirm_paid": (
         "Registered for course {course}.\nName: {name}\nLicense: {license}\n"
-        "Phone: {phone}\nLocation: {location}\nTelegram ID: {telegram_id}\n"
+        "Phone: {phone}\nPharmacist council member: {location}\n"
         "Date: {date}\n{payment_line}",
         "បានចុះឈ្មោះវគ្គ {course} ដោយជោគជ័យ។\nឈ្មោះ៖ {name}\nលេខបញ្ជិកា៖ {license}\n"
-        "ទូរស័ព្ទ៖ {phone}\nទីតាំង៖ {location}\nTelegram ID៖ {telegram_id}\n"
+        "ទូរស័ព្ទ៖ {phone}\nសមាជិកគណៈឱសថការី៖ {location}\n"
         "កាលបរិច្ឆេទ៖ {date}\n{payment_line}",
     ),
     "payment_line_ok": (

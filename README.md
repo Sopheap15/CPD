@@ -14,13 +14,14 @@ Data lives in Excel files, so staff update it without any code.
      (Telegram already linked to their record, or whose license number is on
      file) are registered without re-entering their details; new participants
      are asked for license, name, phone and location.
-   - If the course has a fee, the bot generates a **Bakong KHQR** payment code
-     (fee from the `fee` column in `courses.xlsx`, in USD). The participant
-     scans it with the Bakong app and the bot **confirms the payment
-     automatically** by polling Bakong. After payment, registration is saved to
-     `data/in_bot_registrations.csv` and the participant gets a **Join course
-     group** button so they can join the course's Telegram group (see "Course
-     groups" below).
+   - If the course has a fee, the bot asks the participant to pay by scanning
+     the **ABA QR code** (`aba.png`) and upload a photo of the receipt. The bot
+     **verifies the receipt automatically** with local OCR (Tesseract) — it
+     checks that the recipient name/account and the expected fee appear on the
+     receipt — then saves the registration to `data/in_bot_registrations.csv`
+     with a random `payment_ref` number for easy lookup. The participant then
+     gets a **Join course group** button so they can join the course's Telegram
+     group (see "Course groups" below).
    - **📊 View CPD History** — the bot asks for their name.
 2. For View CPD, the bot finds the match (fuzzy matching; if several people
    share a similar name it shows a choice list).
@@ -39,19 +40,13 @@ note (CPD officer phone/Telegram).
 | `Transformed_Course_Registrations_with_Certificates.xlsx` | Master registration + certificate workbook (the main source). |
 | `courses.xlsx`           | Open courses shown on the "Register for Course" button (`Course ID`, `Title`, `Date`, `CPD Points`, `fee`, `status`, optional `Link` = fallback group invite link). |
 | `course_groups.json`     | Maps each course to its Telegram group chat (managed via the `/admin_group` command — do not edit by hand). |
-| `in_bot_registrations.csv` | Registrations made through the bot; merged into the data automatically. Copy them into the master workbook later. |
-| `telegram_links.json`    | Maps Telegram account IDs to participant names (used to recognize returning participants). |
+| `in_bot_registrations.csv` | Registrations made through the bot (created at runtime; includes `payment_ref` for searching). |
+| `telegram_links.json`    | Maps Telegram account IDs to participant names (created at runtime, used to recognize returning participants). |
 | `participants.xlsx` / `trainings.xlsx` / `certificate_pickup.xlsx` | Optional simple-format files (used only if the master workbook is absent). |
 
 Notes:
 - Dates should be Excel date cells or text `YYYY-MM-DD`.
 - **Files are auto-reloaded** when changed, so you can edit them while the bot runs.
-
-Generate dummy data (optional, for development):
-
-```bash
-pixi run export
-```
 
 ## Course groups
 
@@ -78,62 +73,34 @@ group for each course:
 A participant can only join via the link they receive — the bot cannot put them
 in the group automatically.
 
-## Payments (Bakong KHQR)
+## Payments (ABA receipt verification)
 
-Registration fees are paid by scanning a KHQR code with the **Bakong** app:
+Registration fees are paid by scanning the **ABA QR code** (`aba.png` in the
+project root) with the ABA Mobile app, then uploading the receipt to the bot:
 
-1. Fill in the Bakong merchant settings in `.env`:
-   - `BAKONG_ACCOUNT_ID` — your merchant account, e.g. `merchant@aclb`
-   - `BAKONG_MERCHANT_NAME` — fallback name; the QR shows the **course title**
-     (max 25 chars) when a course has one
-   - `BAKONG_TOKEN` — a developer token from
-     https://api-bakong.nbc.gov.kh/register
-   - `BAKONG_EMAIL` — the email you registered with on the Bakong developer
-     portal. When set, the bot **renews its own token** automatically (see
-     "Token renewal" below) and you never paste one in again.
-   - `BAKONG_CURRENCY=USD` (fees are stored in USD in `courses.xlsx`)
-2. When a participant registers for a paid course, the bot sends a **dynamic
-   KHQR image** with the exact fee and a unique bill number.
-3. The bot **polls Bakong** (`check_transaction_by_md5`) every 20 seconds and
-   confirms the registration automatically the moment the payment lands. A
-   participant can also tap **"I have paid / Check payment"** to check early.
-4. Unpaid registrations are stored in `in_bot_registrations.csv` with
-   `payment_status = Pending` so the admin can see outstanding fees; confirmed
-   ones become `Paid`.
-5. A course with a fee always triggers the payment step, even before the
-   developer token arrives: the QR code is shown and the participant taps
-   **"I have paid"**, which marks the registration `Unverified` and notifies
-   the admin to confirm it manually (`/admin_confirm <bill>`). Once the token
-   is set, confirmation is fully automatic.
-6. If no `BAKONG_ACCOUNT_ID` is present, registrations are saved without
-   payment and the admin can collect fees manually.
+1. Fill in your ABA details in `.env`:
+   - `ABA_MERCHANT_NAME` — the recipient name shown on the receipt (e.g.
+     `SOPHEAP OENG`)
+   - `ABA_ACCOUNT_NUMBER` — the ABA account number (fallback check for direct
+     bank-transfer receipts)
+2. When a participant registers for a paid course, the bot sends the ABA QR
+   image with the exact fee (from the `fee` column in `courses.xlsx`, in USD).
+3. The participant scans it, pays, then taps **"I have paid"** and uploads a
+   screenshot of the receipt.
+4. The bot **verifies the receipt locally with OCR** (Tesseract):
+   - the recipient name or account number appears on the receipt, and
+   - the expected fee amount appears as an actual monetary value.
+   If both match, the registration is saved to `in_bot_registrations.csv` with
+   `status = Paid` and a random 10-digit `payment_ref` number for easy lookup.
+   If the receipt can't be verified, the registration is stored as
+   `status = Unverified` and the admin confirms it manually
+   (`/admin_confirm <bill>`).
+5. A course with a fee always triggers the payment step. If no `ABA_MERCHANT_NAME`
+   is set, registrations are saved without payment and fees are collected manually.
 
-### Getting / renewing the token
-
-Bakong Open API tokens are valid for ~90 days. The first time you use an email,
-you must complete Bakong's two-step registration once (this is why a plain
-renewal says *"Your API token will be emailed to you within 24 hours"*):
-
-```bash
-pixi run python scripts/bakong_token_setup.py
-```
-
-It asks Bakong to email a verification code to your registered address, then
-swaps that code for a token and writes it into `.env` (`BAKONG_TOKEN`).
-
-After that first registration, renewal is automatic:
-
-1. Set `BAKONG_EMAIL` in `.env` to the email you registered with on
-   https://api-bakong.nbc.gov.kh/register.
-2. The bot checks the token shortly after startup and again every
-   `BAKONG_TOKEN_RENEW_DAYS` (default 24) days. If the token is missing or
-   expires within that window it calls `POST /v1/renew_token`, applies the new
-   token in memory, and writes it back into `.env` (so it survives restarts).
-3. You can also renew on demand:
-   `pixi run python scripts/renew_bakong_token.py`
-
-Bakong only accepts requests from Cambodian IP addresses — run the bot on a
-server/VPS located in Cambodia for payments (and token renewal) to work.
+Requirements: **Tesseract OCR** must be installed on the machine running the
+bot (see `pixi.toml` — `pytesseract`, `opencv`, `pyzbar` are included in the
+pixi environment).
 
 ## Admin commands
 
@@ -235,7 +202,6 @@ Windows (PowerShell) / macOS-Linux (`run.ps1` / `run.sh`):
 
 | Command               | What it does                                              |
 | --------------------- | --------------------------------------------------------- |
-| `.\run.ps1 export`    | Rebuild `worker/data.json` from the Excel files           |
 | `.\run.ps1 lint`      | Compile-check all Python files                            |
 | `pixi run start`      | Same as `run.ps1 start` (foreground)                      |
 
@@ -270,30 +236,28 @@ All other admin commands are listed under "Admin commands" above.
 ```
 cpd/
   bot.py           # application assembly, conversation wiring, background jobs
-  config.py        # token + path + Bakong configuration
+  config.py        # token + path + payment configuration
   constants.py     # shared conversation-state constants
   i18n.py          # all translatable strings (EN/KH)
   handlers/        # Telegram conversation handlers
     start.py       #   /start entry point + main-menu callbacks
     history.py     #   CPD history lookup + report menus
-    registration.py#   course registration + Bakong payment flow
+    registration.py#   course registration + ABA receipt payment flow
     groups.py      #   course-group invite links + admin setup nudges
     admin.py       #   admin-only commands
     common.py      #   shared helpers (keyboards, data access, replies)
   services/        # business logic (no telegram imports)
     data_loader.py #   Excel reading, caching, auto-reload, registration merge
     registrations.py # in-bot course registration storage (CSV, incl. payment fields)
-    payments.py    #   Bakong KHQR generation + payment verification
-    bakong_token.py#   Bakong developer-token renewal
+    payments.py    #   pending-payment tracking
+    receipt_scanner.py # OCR receipt verification (recipient + amount checks)
     course_groups.py # course -> Telegram group mapping (course_groups.json)
     search.py      #   fuzzy name matching
     formatter.py   #   report rendering (bilingual)
     real_data.py   #   parses the master "Transformed ... with Certificates" workbook
     google_sheets.py # live Google Sheets fetch (optional)
     storage.py     #   Telegram-ID <-> participant-name links
-data/              # Excel data files + in_bot_registrations.csv + telegram_links.json
-worker/            # Cloudflare Worker port (entry.py, data.json, wrangler.jsonc)
-scripts/           # export_data.py, renew_bakong_token.py, bakong_token_setup.py
+data/              # Excel data files (+ runtime in_bot_registrations.csv, telegram_links.json)
 pixi.toml          # environment definition (Python + libraries)
 run.sh             # launcher for macOS/Linux
 run.ps1            # launcher for Windows

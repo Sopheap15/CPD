@@ -6,7 +6,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from cpd.constants import NAME, REG_IDENTITY, START_OPTIONS
-from cpd.handlers.common import _is_admin, safe_reply_html, send_start_message
+from cpd.handlers.common import _is_admin, send_start_message
 from cpd.i18n import t
 
 
@@ -18,11 +18,6 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
         if payload.startswith("cpd_"):
             from cpd.handlers.admin import auto_link_group
             return await auto_link_group(update, context, payload[4:])
-    if _is_admin(update):
-        # Admins: ask which participant they want to view (no linked-account shortcut).
-        await send_start_message(context, update.effective_chat.id,
-                                 extra=t("ask_admin_view"))
-        return NAME
     await send_start_message(context, update.effective_chat.id)
     return START_OPTIONS
 
@@ -49,9 +44,17 @@ async def on_start_option(update: Update,
             linked_name = get_linked_name(update.effective_user.id)
             if linked_name:
                 return await show_summary(update, context, linked_name, edit=True)
-            await query.edit_message_text(t("ask_verification"), parse_mode="HTML")
-        else:
-            await query.edit_message_text(t("ask_admin_view"), parse_mode="HTML")
+        await query.edit_message_text(t("ask_verification"), parse_mode="HTML")
+        return NAME
+    if action == "certificate":
+        from cpd.handlers.history import show_certificates
+        from cpd.services.storage import get_linked_name
+        if not _is_admin(update):
+            linked_name = get_linked_name(update.effective_user.id)
+            if linked_name:
+                return await show_certificates(update, context, linked_name,
+                                               edit=True)
+        await query.edit_message_text(t("ask_verification"), parse_mode="HTML")
         return NAME
     elif action == "register":
         # Returning / recognized users go straight to the course list.

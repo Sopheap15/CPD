@@ -1,4 +1,4 @@
-"""Course registration conversation, including the Bakong payment step."""
+"""Course registration conversation handler, including the ABA payment step."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import BadRequest
 from telegram.ext import ContextTypes
 
-from cpd.config import BAKONG_CURRENCY
 from cpd.constants import (
     REG_COURSE,
     REG_IDENTITY,
@@ -17,6 +16,7 @@ from cpd.constants import (
     REG_NAME,
     REG_PAYMENT,
     REG_PHONE,
+    REG_RECEIPT,
     START_OPTIONS,
 )
 from cpd.handlers.common import (
@@ -32,8 +32,8 @@ from cpd.handlers.groups import offer_group_join
 from cpd.i18n import fmt, t
 from cpd.services.registrations import (
     append_registration,
+    generate_payment_ref,
     has_duplicate,
-    mark_paid,
     registration_by_name,
 )
 from cpd.services.storage import get_linked_name, link_account
@@ -334,61 +334,37 @@ async def start_payment(update: Update, context: ContextTypes.DEFAULT_TYPE,
     )
 
     if pending is None:
-        # No fee or Bakong not configured -> register immediately.
+        # No fee configured -> register immediately without payment.
         return await complete_registration(update, context, participant)
 
-    # Keep a "pending payment" row so the admin can see outstanding fees.
-    append_registration({
-        "telegram_id": update.effective_user.id,
-        "name": participant.name,
-        "participant_id": participant.participant_id,
-        "phone": participant.phone,
-        "location": participant.department,
-        "course_id": course.course_id,
-        "course_title": course.title,
-        "course_date": course.date,
-        "cpd_points": course.cpd_points,
-        "fee": course.fee,
-        "currency": BAKONG_CURRENCY,
-        "bill_number": pending.bill_number,
-        "qr_md5": pending.md5,
-        "payment_status": "Pending",
-        "status": "Pending payment",
-    })
-
-    amount = f"{pending.amount:.2f}".rstrip("0").rstrip(".")
-    keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton(t("pay_check_button"), callback_data="pay|check")],
+    # No longer appending a 'Pending payment' row.
+    # The registration will only be recorded once the payment is verified.
+    amount = f"{pending.amount:.2f}"
+    pay_kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ " + t("pay_check_button"), callback_data="pay|check")],
         [InlineKeyboardButton(t("pay_cancel_button"), callback_data="pay|cancel")],
     ])
     caption = fmt("pay_intro", course=escape(course.title),
-                  amount=amount, currency=BAKONG_CURRENCY)
-    if pending.user_data.get("can_verify", True):
-        caption += "\n\n" + t("pay_intro_auto")
-    else:
-        caption += "\n\n" + t("pay_manual_mode")
+                  amount=amount, currency="USD")
     try:
-        with open(pending.user_data["qr_image_path"], "rb") as fh:
+        with open("aba.png", "rb") as fh:
             await context.bot.send_photo(
                 chat_id=chat_id,
                 photo=fh,
                 caption=caption,
                 parse_mode="HTML",
-                reply_markup=keyboard,
+                reply_markup=pay_kb,
             )
-    except Exception:  # noqa: BLE001 - QR image failed; fall back to text
-        await safe_reply_html(update, caption, reply_markup=keyboard)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"send_photo failed: {e}", exc_info=True)
+        await safe_reply_html(update, caption, reply_markup=pay_kb)
     return REG_PAYMENT
 
 
 async def on_pay_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    """Callback 'pay|check': confirm payment and finish registration."""
-    from cpd.services.payments import (
-        check_payment,
-        drop_payment,
-        get_pending,
-        payment_expired,
-    )
+    """Callback 'pay|check': ask the user to upload their ABA receipt for verification."""
+    from cpd.services.payments import get_pending, payment_expired, drop_payment
 
     query = update.callback_query
     if query is None:
@@ -407,15 +383,81 @@ async def on_pay_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
         clear_registration_state(context)
         return START_OPTIONS
 
-    # Without a Bakong token we can't poll the transaction, so a manual
-    # "I have paid" is treated as confirmation (Unverified, admin confirms later).
-    if check_payment(chat_id) or not pending.user_data.get("can_verify", True):
-        await finalize_paid_registration(context, pending,
-                                         verified=check_payment(chat_id))
+    await safe_reply_html(
+        update,
+        "📷 សូមបញ្ចូលវិកាយបត្ររបស់អ្នក។"
+    )
+    return REG_RECEIPT
+
+
+async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Handle the uploaded receipt photo and verify it with local OCR."""
+    import os
+    import tempfile
+    import logging
+    from cpd.services.payments import get_pending, drop_payment, payment_expired
+    from cpd.services.receipt_scanner import verify_receipt
+
+    logger = logging.getLogger(__name__)
+    chat_id = update.effective_chat.id
+
+    pending = get_pending(chat_id)
+    if pending is None or payment_expired(chat_id):
+        await safe_reply_html(update, t("pay_expired"))
         clear_registration_state(context)
         return START_OPTIONS
-    await safe_reply_html(update, t("pay_unpaid"))
-    return REG_PAYMENT
+
+    # Get the photo file
+    message = update.effective_message
+    if message and message.photo:
+        photo = message.photo[-1]
+        file_id = photo.file_id
+    elif message and message.document and message.document.mime_type and message.document.mime_type.startswith("image/"):
+        file_id = message.document.file_id
+    else:
+        await safe_reply_html(
+            update,
+            "❌ សូមបញ្ចូលរូបភាពវិកាយបត្ររបស់អ្នក។"
+        )
+        return REG_RECEIPT
+
+    await safe_reply_html(update, "🔍 កំពុងពិនិត្យវិកាយបត្ររបស់អ្នក...")
+
+    file = await context.bot.get_file(file_id)
+
+    # Download to a temp file
+    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+        tmp_path = tmp.name
+    try:
+        await file.download_to_drive(tmp_path)
+        ok, reason, _ = verify_receipt(tmp_path, pending.amount)
+    finally:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+
+    if ok:
+        await finalize_paid_registration(context, pending, verified=True)
+        clear_registration_state(context)
+        return START_OPTIONS
+    else:
+        logger.warning("Receipt verification failed for chat %s: %s", chat_id, reason)
+        cancel_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(t("pay_cancel_button"), callback_data="pay|cancel")],
+        ])
+        
+        # Determine if we should ask for a clearer photo
+        suffix = "\n\n📷 សូមផ្ញើរូបភាពវិកាយបត្រច្បាស់ជាងនេះ ឬចុចលុបចោល។"
+        if "ធ្លាប់ត្រូវបានប្រើរួចហើយ" in reason:
+            suffix = ""
+            
+        await safe_reply_html(
+            update,
+            f"{reason}{suffix}",
+            reply_markup=cancel_kb,
+        )
+        return REG_RECEIPT
 
 
 async def on_pay_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -457,6 +499,7 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
         "course_date": course.date,
         "cpd_points": course.cpd_points,
         "fee": course.fee,
+        "payment_ref": generate_payment_ref(),
         "status": "Registered",
     })
 
@@ -469,7 +512,6 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
               license=escape(participant.participant_id or "-"),
               phone=escape(participant.phone or "-"),
               location=escape(participant.department or "-"),
-              telegram_id=update.effective_user.id,
               date=now_str())
     await safe_reply_html(update, msg)
 
@@ -484,9 +526,8 @@ async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
                                      pending, verified: bool = True) -> None:
     """Complete a registration after payment confirmation.
 
-    ``verified=True`` means Bakong confirmed the transaction (or auto-verification
-    is configured). ``verified=False`` is a manual "I have paid" tap when the
-    developer token is still missing — the registration is saved as Unverified.
+    ``verified=True`` means OCR confirmed the receipt. ``verified=False`` means
+    the receipt could not be auto-verified — registration is saved as Unverified.
     """
     from cpd.services.data_loader import Course, Participant
     from cpd.services.payments import drop_payment
@@ -510,26 +551,32 @@ async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
     chat_id = pending.chat_id
     amount = f"{pending.amount:.2f}".rstrip("0").rstrip(".")
 
-    # The "Pending payment" row was already written when the QR was created;
-    # flip it to paid now.
-    mark_paid(pending.bill_number,
-              payment_status="Paid" if verified else "Unverified")
+    # Payment is verified; record the registration permanently.
+    append_registration({
+        "telegram_id": pending.telegram_id,
+        "name": participant.name,
+        "participant_id": participant.participant_id,
+        "phone": participant.phone,
+        "location": participant.department,
+        "course_id": course.course_id,
+        "course_title": course.title,
+        "course_date": course.date,
+        "cpd_points": course.cpd_points,
+        "fee": course.fee,
+        "currency": "USD",
+        "bill_number": pending.bill_number,
+        "payment_ref": generate_payment_ref(),
+        "status": "Paid" if verified else "Unverified",
+    })
     drop_payment(chat_id)
 
     if participant.name and get_linked_name(pending.telegram_id) is None:
         link_account(pending.telegram_id, participant.name)
 
     try:
-        await context.bot.send_message(
-            chat_id,
-            fmt("pay_success" if verified else "pay_success_pending",
-                amount=amount, currency=BAKONG_CURRENCY,
-                course=escape(course.title)),
-            parse_mode="HTML",
-        )
         payment_line = fmt(
             "payment_line_ok" if verified else "payment_line_pending",
-            amount=amount, currency=BAKONG_CURRENCY)
+            amount=amount, currency="USD")
         await context.bot.send_message(
             chat_id,
             fmt("reg_confirm_paid",
@@ -538,7 +585,6 @@ async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
                 license=escape(participant.participant_id or "-"),
                 phone=escape(participant.phone or "-"),
                 location=escape(participant.department or "-"),
-                telegram_id=pending.telegram_id,
                 date=now_str(),
                 payment_line=payment_line),
             parse_mode="HTML",

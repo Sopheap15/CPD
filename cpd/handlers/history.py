@@ -6,14 +6,12 @@ import logging
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import ContextTypes, ConversationHandler
+from telegram.ext import ContextTypes
 
 from cpd.constants import MENU, NAME, NL
 from cpd.services.formatter import (
     certificate_report,
-    summary_report,
     summary_sections,
-    training_report,
 )
 from cpd.handlers.common import (
     _is_admin,
@@ -37,7 +35,7 @@ async def cmd_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     if not query:
         await safe_reply_html(
             update,
-            t("ask_admin_view") if _is_admin(update) else t("ask_verification"),
+            t("ask_verification"),
         )
         return NAME
     return await handle_verification(update, context, query)
@@ -125,53 +123,42 @@ async def on_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | N
     await query.answer()
     action = query.data.split("|", 1)[1]
 
+    if action == "back":
+        from cpd.constants import START_OPTIONS
+        from cpd.handlers.common import _start_keyboard
+        await query.edit_message_text(
+            f"<b>{t('welcome')}</b>",
+            parse_mode="HTML",
+            reply_markup=_start_keyboard(),
+        )
+        return START_OPTIONS
+    return MENU
+
+
+async def show_certificates(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                            name: str, edit: bool = False) -> str:
     from cpd.handlers.common import _cpd
 
     data = _cpd(context)
-    name = context.user_data.get("name", "")
-    if not name:
-        await query.edit_message_text(t("ask_name"), parse_mode="HTML")
-        return NAME
-
     participant = _resolve_for_name(data, name)
-    if participant is None:
-        await query.edit_message_text(t("ask_name"), parse_mode="HTML")
-        return NAME
 
-    trainings = data.trainings_for(participant.participant_id,
-                                   participant.name, participant.khmer_name)
+    context.user_data["name"] = participant.name
     certificates = data.certificates_for(participant.participant_id,
                                          participant.name, participant.khmer_name)
-
-    if action == "summary":
-        text = summary_report(participant, trainings, certificates)
-        markup = menu_keyboard()
-    elif action == "training":
-        text = training_report(participant.name, trainings)
-        markup = menu_keyboard()
-    elif action == "certificate":
-        text = certificate_report(participant.name, certificates)
-        markup = menu_keyboard()
-    elif action == "search":
-        from cpd.services.storage import unlink_account
-        unlink_account(update.effective_user.id)
-        context.user_data.pop("name", None)
-        await query.edit_message_text(t("ask_verification"), parse_mode="HTML")
-        return NAME
-    elif action == "done":
-        try:
-            await query.message.delete()
-        except Exception:
-            await query.edit_message_text(t("done"), parse_mode="HTML")
-        context.user_data.pop("name", None)
-        return ConversationHandler.END
-    else:
-        return MENU
+    text = certificate_report(participant.name, certificates)
 
     try:
-        await query.edit_message_text(text, parse_mode="HTML", reply_markup=markup)
-    except Exception:  # noqa: BLE001 - e.g. message not modified
-        await safe_reply_html(update, text, reply_markup=markup)
+        if edit:
+            await update.callback_query.edit_message_text(
+                text, parse_mode="HTML", reply_markup=menu_keyboard()
+            )
+            return MENU
+        await update.effective_message.reply_html(
+            text, reply_markup=menu_keyboard()
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Failed to send certificates for %r: %r", name, exc)
+        await safe_reply_html(update, t("error"))
     return MENU
 
 

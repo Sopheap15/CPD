@@ -1,6 +1,0 @@
-registered_at,telegram_id,name,participant_id,phone,location,course_id,course_title,course_date,cpd_points,fee,currency,bill_number,qr_md5,payment_status,paid_at,status
-2026-08-20 12:39:33,699463365,Oeng Sopheap,123456788,012406388,Phnom Penh,C002,Role of pharmacy in hospital,2026-09-15,15,10.0,USD,CPDC002-699463365-204373,67b3c806d67bb3cf43e27285a9c0ebb3,Pending,,Pending payment
-2026-08-20 12:52:06,227881019,eang phanith,098448619,098448619,រាជធានីភ្នំពេញ,C002,Role of pharmacy in hospital,2026-09-15,15,10.0,USD,CPDC002-227881019-205126,6b7810428ad16cd7419724e5b40fe384,Pending,,Pending payment
-2026-08-20 13:02:48,699463365,Oeng Sopheap,123456788,012406388,Phnom Penh,C002,Role of pharmacy in hospital,2026-09-15,15,10.0,USD,CPDC002-699463365-205768,8b807a9f932d25f62e3466f18ac00676,Pending,,Pending payment
-2026-08-20 13:16:25,699463365,Oeng Sopheap,123456788,012406388,Phnom Penh,C002,Role of pharmacy in hospital,2026-09-15,15,10.0,USD,CPDC002-699463365-206585,c4e4d3b07d8631a556976fafa79b66f2,Pending,,Pending payment
-2026-08-20 13:24:39,699463365,Oeng Sopheap,123456788,012406388,Phnom Penh,C002,Role of pharmacy in hospital,2026-09-15,15,10.0,USD,CPDC002-699463365-207079,e2ff43f58a08447b787a30262e341fbb,Pending,,Pending payment

@@ -61,29 +61,6 @@ GOOGLE_SHEET_SHEET_NAMES = [
     if name.strip()
 ]
 
-# --- Bakong KHQR payment settings ---
-# Merchant Bakong Account ID (e.g. "merchant@aclb"), the merchant display
-# name shown on the QR, and the Bakong developer token (register at
-# https://api-bakong.nbc.gov.kh/register). Payments are captured in USD.
-BAKONG_ACCOUNT_ID = os.getenv("BAKONG_ACCOUNT_ID", "").strip()
-BAKONG_MERCHANT_NAME = os.getenv("BAKONG_MERCHANT_NAME", "").strip()
-BAKONG_MERCHANT_CITY = os.getenv("BAKONG_MERCHANT_CITY", "Phnom Penh").strip()
-BAKONG_CURRENCY = os.getenv("BAKONG_CURRENCY", "USD").strip().upper()
-BAKONG_TOKEN = os.getenv("BAKONG_TOKEN", "").strip()
-# Email used to register at https://api-bakong.nbc.gov.kh/register. When set,
-# the bot can renew its own token via POST /v1/renew_token and never needs a
-# manually pasted token again.
-BAKONG_EMAIL = os.getenv("BAKONG_EMAIL", "").strip()
-# Bakong Open API base URL (production). Endpoints under it are called with
-# the renewal script and the transaction-polling job.
-BAKONG_BASE_URL = os.getenv("BAKONG_BASE_URL", "https://api-bakong.nbc.gov.kh").strip().rstrip("/")
-# Renew the developer token whenever it expires within this many days
-# (tokens are valid ~90 days; the job runs on this same cadence).
-BAKONG_TOKEN_RENEW_DAYS = int(os.getenv("BAKONG_TOKEN_RENEW_DAYS", "24"))
-# How long (minutes) to keep polling Bakong for a payment before giving up.
-BAKONG_PAYMENT_TIMEOUT_MINUTES = int(
-    os.getenv("BAKONG_PAYMENT_TIMEOUT_MINUTES", "15")
-)
 
 
 def validate() -> None:

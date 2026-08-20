@@ -46,15 +46,7 @@ def menu_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("📊 សង្ខេប (Summary)", callback_data="menu|summary"),
-                InlineKeyboardButton("🎓 បណ្តុះបណ្តាល (Training)", callback_data="menu|training"),
-            ],
-            [
-                InlineKeyboardButton("📜 វិញ្ញាបនបត្រ (Certificate)", callback_data="menu|certificate"),
-                InlineKeyboardButton("🔍 ស្វែងរកផ្សេងទៀត (Search)", callback_data="menu|search"),
-            ],
-            [
-                InlineKeyboardButton("រួចរាល់", callback_data="menu|done"),
+                InlineKeyboardButton("🔙 ត្រឡប់ក្រោយ (Back)", callback_data="menu|back"),
             ],
         ]
     )
@@ -64,11 +56,14 @@ def _start_keyboard() -> InlineKeyboardMarkup:
     """Main /start menu."""
     return InlineKeyboardMarkup([
         [InlineKeyboardButton(
-            "📋 ចុះឈ្មោះវគ្គបណ្តុះបណ្តាល (Register for Course)",
+            "1️⃣ 📋 ចុះឈ្មោះចូលរួមវគ្គបណ្តុះបណ្តាល (Register)",
             callback_data="start|register")],
         [InlineKeyboardButton(
-            "📊 មើលប្រវត្តិ CPD (View CPD History)",
+            "2️⃣ 📊 មើលប្រវត្តការបណ្តុះបណ្តាល (View History)",
             callback_data="start|view_cpd")],
+        [InlineKeyboardButton(
+            "3️⃣ 📜 ដកវិញ្ញាប័ណ្ណបត្រ (Certificates)",
+            callback_data="start|certificate")],
     ])
 
 

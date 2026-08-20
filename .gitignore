@@ -5,9 +5,13 @@ __pycache__/
 venv/
 .DS_Store
 *.log
+bot.pid
+*.jpg
+*.jpeg
 data/cpd.err
 data/cpd.out
 data/cpd.watchdog.log
-worker/bot.log
-worker/bot.err.log
+data/in_bot_registrations.csv
+data/telegram_links.json
+data/used_receipts.json
 ~$*.xlsx

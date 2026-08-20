@@ -238,7 +238,7 @@ async def cmd_admin_regs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     for r in reversed(rows):
         name = escape(r.get("name", "") or "-")
         course = escape(r.get("course_title", "") or r.get("course_id", "") or "-")
-        pay = escape(r.get("payment_status", "") or r.get("status", "") or "-")
+        pay = escape(r.get("status", "") or "-")
         when = escape(r.get("registered_at", "") or "")
         lines.append(f"• <b>{course}</b> — {name} [{pay}]{f' ({when})' if when else ''}")
     await safe_reply_html(update, "\n".join(lines[:50]))
@@ -257,7 +257,7 @@ async def cmd_admin_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     bill = args[0].strip()
     from cpd.services.registrations import mark_paid
-    if mark_paid(bill, payment_status="Paid"):
+    if mark_paid(bill, status="Paid"):
         await safe_reply_html(update,
             f"✅ Payment <code>{escape(bill)}</code> marked as <b>Paid</b>.")
     else:

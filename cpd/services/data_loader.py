@@ -305,16 +305,21 @@ class CpdData:
             course_path = self._data_dir / "courses.xlsx"
             if course_path.exists():
                 df = pd.read_excel(course_path)
+                # Normalise column names (strip whitespace, lowercase) so the
+                # lookup works regardless of how the header is capitalised in
+                # the spreadsheet.
+                df.columns = [str(c).strip().lower().replace(" ", "_")
+                              for c in df.columns]
                 for _, row in df.iterrows():
                     self.courses.append(
                         Course(
-                            course_id=_norm(row.get("Course ID", "")),
-                            title=_norm(row.get("Title", "")),
-                            date=_norm(row.get("Date", "")),
-                            cpd_points=_norm(row.get("CPD Points", "")),
-                            link=_norm(row.get("Link", "")),
+                            course_id=_norm(row.get("course_id", "")),
+                            title=_norm(row.get("title", "")),
+                            date=_norm(row.get("date", "")),
+                            cpd_points=_norm(row.get("cpd_points", "")),
+                            link=_norm(row.get("link", "")),
                             status=_norm(row.get("status", "")),
-                            fee=_parse_fee(row.get("fee", row.get("Fee", 0))),
+                            fee=_parse_fee(row.get("fee", 0)),
                         )
                     )
 

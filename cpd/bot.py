@@ -24,6 +24,7 @@ from cpd.constants import (
     REG_LOCATION,
     REG_NAME,
     REG_PAYMENT,
+    REG_RECEIPT,
     REG_PHONE,
     START_OPTIONS,
 )
@@ -49,6 +50,7 @@ from cpd.handlers.registration import (
     finalize_paid_registration,
     on_pay_cancel,
     on_pay_check,
+    on_receipt_photo,
     on_reg_course,
     on_reg_identity,
     on_reg_license,
@@ -166,6 +168,12 @@ def build_application() -> Application:
         CallbackQueryHandler(on_pay_cancel, pattern=r"^pay\|cancel"),
         CommandHandler("cancel", cmd_cancel),
     ]
+    reg_receipt_handlers = [
+        MessageHandler(filters.PHOTO | filters.Document.IMAGE, on_receipt_photo),
+        MessageHandler(filters.ALL & ~filters.COMMAND, on_receipt_photo), # Catch text/files to show error
+        CallbackQueryHandler(on_pay_cancel, pattern=r"^pay\|cancel"),
+        CommandHandler("cancel", cmd_cancel),
+    ]
 
     conversation = ConversationHandler(
         entry_points=[
@@ -183,6 +191,7 @@ def build_application() -> Application:
             REG_PHONE: reg_phone_handlers,
             REG_LOCATION: reg_location_handlers,
             REG_PAYMENT: reg_payment_handlers,
+            REG_RECEIPT: reg_receipt_handlers,
         },
         fallbacks=[
             CommandHandler("cancel", cmd_cancel),
@@ -222,59 +231,7 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("admin_kick", cmd_admin_kick))
     application.add_error_handler(_error_handler)
 
-    # Automatic Bakong payment confirmation: poll every 20s and finalise any
-    # registration whose KHQR payment has landed.
-    from cpd.services.payments import payment_enabled
-    if payment_enabled() and application.job_queue is not None:
-        application.job_queue.run_repeating(_payment_poll_job, interval=20,
-                                            first=20, name="cpd_payment_poll")
-
-    # Automatic Bakong token renewal: check shortly after startup and again on
-    # the configured cadence (default every 24 days). Renews whenever the token
-    # is missing or expires within BAKONG_TOKEN_RENEW_DAYS.
-    from cpd.config import BAKONG_EMAIL, BAKONG_TOKEN_RENEW_DAYS
-    if BAKONG_EMAIL and application.job_queue is not None:
-        application.job_queue.run_repeating(
-            _bakong_token_renew_job,
-            interval=BAKONG_TOKEN_RENEW_DAYS * 86400,
-            first=30,
-        )
     return application
-
-
-async def _bakong_token_renew_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Background job: renew the Bakong token when it is due."""
-    import asyncio
-
-    from cpd.services.bakong_token import renew_if_due
-
-    renewed, message = await asyncio.to_thread(renew_if_due)
-    if renewed:
-        logger.info("Bakong token renewed automatically: %s", message)
-        # With a live token now available, start the payment poll job if it
-        # was not running yet.
-        from cpd.services.payments import payment_enabled
-        if payment_enabled() and context.job_queue is not None:
-            jobs = [j for j in context.job_queue.jobs()
-                    if j.name == "cpd_payment_poll"]
-            if not jobs:
-                context.job_queue.run_repeating(_payment_poll_job, interval=20,
-                                                first=20, name="cpd_payment_poll")
-    else:
-        logger.info("Bakong token check: %s", message)
-
-
-async def _payment_poll_job(context: ContextTypes.DEFAULT_TYPE) -> None:
-    """Background job: finalise registrations whose payment is confirmed."""
-    from cpd.services.payments import poll_ready_payments
-    for pending in poll_ready_payments():
-        try:
-            await finalize_paid_registration(context, pending)
-        except Exception:  # noqa: BLE001 - never crash the job
-            logger.warning("Failed to finalise payment for chat %s",
-                           pending.chat_id, exc_info=True)
-
-
 async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Unhandled error (update=%s): %s",
                  type(update).__name__, context.error, exc_info=context.error)

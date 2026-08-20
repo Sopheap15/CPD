@@ -1,14 +1,6 @@
-"""Bakong KHQR payment generation and verification.
+"""Payment tracking module.
 
-Generates a dynamic KHQR (amount locked) for a course fee, renders it to a
-PNG image, and checks whether the participant has paid by polling Bakong's
-``check_transaction_by_md5`` endpoint.
-
-The bot itself cannot receive inbound webhooks (it runs behind a long-polling
-Telegram connection on a local machine), so "automatic" payment confirmation is
-implemented as background polling: a pending payment is registered with
-:func:`track_payment` and a periodic job calls :func:`check_payment` until the
-transaction is found or the timeout is reached.
+Tracks pending payments in memory while the user is uploading a receipt screenshot.
 """
 
 from __future__ import annotations
@@ -17,141 +9,9 @@ import threading
 import time
 from dataclasses import dataclass, field
 
-from cpd.config import (
-    BAKONG_ACCOUNT_ID,
-    BAKONG_CURRENCY,
-    BAKONG_MERCHANT_CITY,
-    BAKONG_MERCHANT_NAME,
-    BAKONG_TOKEN,
-    BAKONG_PAYMENT_TIMEOUT_MINUTES,
-)
-
-# The developer token can be renewed at runtime (see cpd.bakong_token), so it
-# is held in a module-level slot rather than read from config on every call.
-_token = BAKONG_TOKEN or None
-
-_khqr_lock = threading.Lock()
-_khqr = None
-
-
-def get_token() -> str | None:
-    """Return the current Bakong developer token (may be renewed at runtime)."""
-    return _token
-
-
-def set_token(token: str | None) -> None:
-    """Replace the Bakong developer token used for verification."""
-    global _token, _khqr
-    token = (token or "").strip() or None
-    with _khqr_lock:
-        _token = token
-        _khqr = None  # force the KHQR client to rebuild with the new token
-
-
-def _get_khqr():
-    """Return a shared KHQR instance (created lazily)."""
-    global _khqr
-    with _khqr_lock:
-        if _khqr is None:
-            from bakong_khqr import KHQR
-
-            _khqr = KHQR(_token)
-        return _khqr
-
-
-def _normalize_qr(qr: str, amount: float, currency: str) -> str:
-    """Make the KHQR payload maximally compatible and recompute the CRC.
-
-    The bundled library trims the amount to ``"10"`` (no decimal separator)
-    and emits tag 99 with a 1-day expiration. Some bank apps (e.g. ABA) parse
-    the amount strictly per EMVCo and expect the decimal separator for USD
-    (``"10.00"``), and Bakong's integration guide requires the QR to expire
-    within 10 minutes. This walks the top-level tags, reformats tag 54,
-    shortens tag 99's expiration to 10 minutes, and recomputes the CRC.
-    """
-    import time as _time
-    from bakong_khqr.sdk.crc import CRC
-
-    if currency.upper() == "USD":
-        amount_str = f"{amount:.2f}"
-    else:
-        amount_str = f"{amount:.0f}"
-
-    expiry_ms = str((_time.time() + 600) * 1000).split(".")[0]
-    if len(expiry_ms) > 13:
-        expiry_ms = expiry_ms[:13]
-
-    i = 0
-    parts = []
-    while i < len(qr):
-        tag = qr[i:i + 2]
-        if tag == "63":
-            break
-        length = int(qr[i + 2:i + 4])
-        value = qr[i + 4:i + 4 + length]
-        if tag == "54":
-            value = amount_str
-        elif tag == "99":
-            value = _rewrite_expiration(value, expiry_ms)
-        elif tag == "62":
-            value = _sort_subtags(value)
-        parts.append(f"{tag}{len(value):02d}{value}")
-        i += 4 + length
-    body = "".join(parts)
-    return body + CRC().value(body)
-
-
-def _sort_subtags(template_value: str) -> str:
-    """Reorder sub-tags inside a template (tag 62 etc.) in ascending order.
-
-    The bundled library emits additional-data sub-tags as 03, 02, 01, 07, but
-    EMVCo requires ascending order (01, 02, 03, 07, 08). Strict parsers (e.g.
-    ABA) validate the ordering; lenient ones (e.g. ACLEDA) tolerate it.
-    """
-    items = []
-    j = 0
-    while j < len(template_value):
-        sub_tag = template_value[j:j + 2]
-        sub_len = int(template_value[j + 2:j + 4])
-        sub_val = template_value[j + 4:j + 4 + sub_len]
-        items.append((sub_tag, sub_val))
-        j += 4 + sub_len
-    items.sort(key=lambda x: x[0])
-    return "".join(f"{t}{len(v):02d}{v}" for t, v in items)
-
-
-def _rewrite_expiration(tag99_value: str, expiry_ms: str) -> str:
-    """Replace tag 99's expiration sub-tag (01) value, keeping its timestamp."""
-    j = 0
-    sub_parts = []
-    while j < len(tag99_value):
-        sub_tag = tag99_value[j:j + 2]
-        sub_len = int(tag99_value[j + 2:j + 4])
-        sub_val = tag99_value[j + 4:j + 4 + sub_len]
-        if sub_tag == "01":
-            sub_val = expiry_ms
-        sub_parts.append(f"{sub_tag}{len(sub_val):02d}{sub_val}")
-        j += 4 + sub_len
-    return "".join(sub_parts)
-
-
-def _qr_merchant_name(course) -> str:
-    """Merchant name shown on the QR: the course title (max 25 chars).
-
-    Falls back to the configured merchant name when the course has no title.
-    """
-    name = (course.title or BAKONG_MERCHANT_NAME or "").strip()
-    if len(name) > 25:
-        cut = name[:25].rfind(" ")
-        name = name[:cut] if cut > 0 else name[:25]
-    return name.rstrip()
-
-
 @dataclass
 class PendingPayment:
-    """A payment we are waiting for."""
-
-    md5: str
+    """A payment we are waiting for the user to upload a receipt for."""
     bill_number: str
     chat_id: int
     telegram_id: int
@@ -162,62 +22,22 @@ class PendingPayment:
     user_data: dict = field(default_factory=dict)
 
 
-# chat_id -> PendingPayment, tracked while the bot polls Bakong.
+# chat_id -> PendingPayment, tracked while waiting for receipt upload
 _pending: dict[int, PendingPayment] = {}
 _pending_lock = threading.Lock()
 
 
-def payment_enabled() -> bool:
-    """True when Bakong automatic verification is fully configured."""
-    return bool(BAKONG_ACCOUNT_ID and _token)
-
-
-def qr_enabled() -> bool:
-    """True when a KHQR code can be generated (merchant account set).
-
-    The developer token is only needed to *verify* a payment; the QR image
-    itself can be produced without it.
-    """
-    return bool(BAKONG_ACCOUNT_ID)
-
-
-def can_verify() -> bool:
-    """True when payment status can be checked automatically."""
-    return bool(_token)
-
-
 def create_payment(chat_id: int, telegram_id: int, course,
                    participant=None, user_data: dict | None = None) -> PendingPayment | None:
-    """Create a dynamic KHQR for a course fee.
-
-    Returns a :class:`PendingPayment` with the generated QR image path, or
-    ``None`` if the merchant isn't configured or the course has no fee.
-    """
+    """Track a new pending payment."""
     fee = float(course.fee or 0)
-    if not qr_enabled() or fee <= 0:
+    if fee <= 0:
         return None
 
     bill_number = (f"CPD{course.course_id}-{telegram_id}-"
                    f"{int(time.time()) % 1000000}")
-    khqr = _get_khqr()
-
-    qr = khqr.create_qr(
-        account_id=BAKONG_ACCOUNT_ID,
-        merchant_name=_qr_merchant_name(course),
-        merchant_city=BAKONG_MERCHANT_CITY,
-        amount=fee,
-        currency=BAKONG_CURRENCY,
-        store_label=course.course_id,
-        bill_number=bill_number,
-        static=False,
-        expiration=1,
-    )
-    qr = _normalize_qr(qr, fee, BAKONG_CURRENCY)
-    md5 = khqr.generate_md5(qr)
-    image_path = khqr.qr_image(qr, format="png")
-
+    
     pending = PendingPayment(
-        md5=md5,
         bill_number=bill_number,
         chat_id=chat_id,
         telegram_id=telegram_id,
@@ -226,10 +46,7 @@ def create_payment(chat_id: int, telegram_id: int, course,
         amount=fee,
         user_data=user_data or {},
     )
-    pending.user_data["qr_image_path"] = image_path
-    pending.user_data["qr_md5"] = md5
     pending.user_data["bill_number"] = bill_number
-    pending.user_data["can_verify"] = can_verify()
 
     with _pending_lock:
         _pending[chat_id] = pending
@@ -237,57 +54,21 @@ def create_payment(chat_id: int, telegram_id: int, course,
 
 
 def get_pending(chat_id: int) -> PendingPayment | None:
+    """Retrieve the pending payment for a chat ID."""
     with _pending_lock:
         return _pending.get(chat_id)
 
 
 def drop_payment(chat_id: int) -> None:
+    """Remove a pending payment."""
     with _pending_lock:
         _pending.pop(chat_id, None)
 
 
-def check_payment(chat_id: int) -> bool:
-    """Poll Bakong for the pending payment of *chat_id*.
-
-    Returns True only once the transaction is confirmed as paid. On a
-    successful payment the pending entry is removed.
-    """
-    pending = get_pending(chat_id)
-    if pending is None:
-        return False
-    if not can_verify():
-        return False
-    try:
-        status = _get_khqr().check_payment(pending.md5)
-    except Exception:  # noqa: BLE001 - network hiccup: treat as unpaid
-        return False
-    if status == "PAID":
-        drop_payment(chat_id)
-        return True
-    return False
-
-
 def payment_expired(chat_id: int, now: float | None = None) -> bool:
-    """True when the pending payment has outlived the configured timeout."""
+    """True when the pending payment has outlived a 30-minute timeout."""
     pending = get_pending(chat_id)
     if pending is None:
         return True
     now = now if now is not None else time.time()
-    return (now - pending.created_at) > (BAKONG_PAYMENT_TIMEOUT_MINUTES * 60)
-
-
-def poll_ready_payments() -> list[PendingPayment]:
-    """Return all pending payments that have been confirmed as paid.
-
-    Used by the background job: payments returned here are finalised (the
-    participant is registered + offered the group join).
-    """
-    with _pending_lock:
-        chat_ids = list(_pending.keys())
-    paid = []
-    for chat_id in chat_ids:
-        if check_payment(chat_id):
-            p = get_pending(chat_id)
-            if p is not None:
-                paid.append(p)
-    return paid
+    return (now - pending.created_at) > (30 * 60)

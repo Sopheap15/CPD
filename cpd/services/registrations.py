@@ -9,7 +9,7 @@ into the master data later.
 from __future__ import annotations
 
 import csv
-import json
+import secrets
 import time
 from pathlib import Path
 
@@ -31,11 +31,14 @@ REGISTRATION_COLUMNS = [
     "fee",
     "currency",
     "bill_number",
-    "qr_md5",
-    "payment_status",
-    "paid_at",
+    "payment_ref",
     "status",
 ]
+
+
+def generate_payment_ref() -> str:
+    """Return a random 10-digit receipt number for easy searching."""
+    return f"{secrets.randbelow(10**10):010d}"
 
 
 def _empty_row() -> dict:
@@ -112,8 +115,7 @@ def find_registration(telegram_id: int, course_id: str) -> dict | None:
     for r in load_registrations():
         if str(r.get("telegram_id", "")).strip() == str(telegram_id).strip() and \
                 str(r.get("course_id", "")).strip() == str(course_id).strip():
-            if r.get("payment_status") == "Pending" or \
-                    r.get("status") == "Pending payment":
+            if r.get("status") == "Pending payment":
                 continue
             return r
     return None
@@ -159,23 +161,29 @@ def registration_by_name(telegram_id: int, name: str) -> dict | None:
     return rows[-1]
 
 
-def mark_paid(bill_number: str, payment_status: str = "Paid") -> bool:
+def has_payment_ref(ref: str) -> bool:
+    """Check if a payment reference has already been used in any registration."""
+    if not ref:
+        return False
+    rows = load_registrations()
+    for r in rows:
+        if r.get("payment_ref") == ref:
+            return True
+    return False
+
+def mark_paid(bill_number: str, status: str = "Paid") -> bool:
     """Update the payment fields of the registration with *bill_number*.
 
-    Registrations are stored while unpaid too (so the admin can see pending
-    fees). This flips the row to paid once Bakong confirms the transaction.
+    Registrations are stored while unpaid (so the admin can see pending
+    fees). This flips the row to paid once receipt verification succeeds.
     """
     if not bill_number:
         return False
     rows = load_registrations()
     updated = False
-    paid_at = time.strftime("%Y-%m-%d %H:%M:%S")
     for row in rows:
         if str(row.get("bill_number", "")).strip() == str(bill_number).strip():
-            row["payment_status"] = payment_status
-            row["paid_at"] = paid_at
-            if payment_status == "Paid":
-                row["status"] = "Registered"
+            row["status"] = status
             updated = True
     if not updated:
         return False
