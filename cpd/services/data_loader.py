@@ -13,6 +13,7 @@ bot is running without restarting it.
 from __future__ import annotations
 
 import logging
+import re
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -81,8 +82,8 @@ FILE_COLUMNS = {
 class Course:
     course_id: str = ""
     title: str = ""
-    date: str = ""
-    time: str = ""
+    date: str = ""        # start date (and time when set)
+    end: str = ""         # end date (and time when set), "" if single moment
     cpd_points: str = ""
     link: str = ""
     status: str = ""
@@ -180,15 +181,21 @@ def _parse_fee(value: Any) -> float:
         return 0.0
 
 
-def _format_course_date(value: Any) -> str:
-    """Format a course date as ``YYYY-MM-DD`` or ``YYYY-MM-DD HH:MM``.
+def _format_course_datetime(value: Any, base: str = "") -> str:
+    """Format a course start/end cell as ``YYYY-MM-DD`` or ``YYYY-MM-DD HH:MM``.
 
     The time part is shown only when the Excel cell actually carries one
-    (e.g. ``2026-07-25 14:00``); midnight times are hidden.
+    (e.g. ``2026-07-25 14:00``); midnight times are hidden. A time-only cell
+    (e.g. ``17:30``) is interpreted on the *base* date (the start date).
     """
     s = _norm(value)
     if not s:
         return ""
+    if re.match(r"^\s*\d{1,2}:\d{2}", s) and "-" not in s and "/" not in s:
+        # Time-only value: needs the base date to make sense.
+        if not base:
+            return s
+        s = f"{base[:10]} {s.strip()}"
     try:
         ts = pd.to_datetime(s)
     except (ValueError, TypeError):
@@ -403,12 +410,15 @@ class CpdData:
                 df.columns = [str(c).strip().lower().replace(" ", "_")
                               for c in df.columns]
                 for _, row in df.iterrows():
+                    start = _format_course_datetime(
+                        row.get("start", row.get("date", "")))
                     self.courses.append(
                         Course(
                             course_id=_norm(row.get("course_id", "")),
                             title=_norm(row.get("title", "")),
-                            date=_format_course_date(row.get("date", "")),
-                            time=_norm(row.get("time", "")),
+                            date=start,
+                            end=_format_course_datetime(
+                                row.get("end", ""), base=start),
                             cpd_points=_norm(row.get("cpd_points", "")),
                             link=_norm(row.get("link", "")),
                             status=_norm(row.get("status", "")),

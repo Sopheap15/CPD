@@ -71,10 +71,19 @@ def _course_list_text(data) -> str:
     blocks = []
     for idx, c in enumerate(open_courses(data), start=1):
         block = f"<b>{idx}.</b> <b>{escape(c.title)}</b>"
-        if c.date:
-            block += f"\n  🗓️ កាលបរិច្ឆេទ (Date): {escape(c.date)}"
-        if c.time:
-            block += f"\n  ⏰ ម៉ោង (Time): {escape(c.time)}"
+        same_day = bool(c.end) and c.end[:10] == c.date[:10]
+        if c.date and c.end and not same_day:
+            # Multi-day course: show start and end separately.
+            block += f"\n  🗓️ ចាប់ផ្តើម (Start): {escape(c.date)}"
+            block += f"\n  🏁 បញ្ចប់ (End): {escape(c.end)}"
+        elif c.date:
+            block += f"\n  🗓️ កាលបរិច្ឆេទ (Date): {escape(c.date[:10] if same_day else c.date)}"
+            if same_day:
+                start_t = c.date[11:]
+                end_t = c.end[11:]
+                if start_t or end_t:
+                    times = " - ".join(t for t in (start_t, end_t) if t)
+                    block += f"\n  ⏰ ម៉ោង (Time): {escape(times)}"
         if c.cpd_points:
             block += f"\n  ⭐ ពិន្ទុ CPD (CPD Points): {escape(c.cpd_points)}"
         if c.fee:
