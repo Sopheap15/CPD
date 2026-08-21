@@ -429,14 +429,20 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         file = await context.bot.get_file(file_id)
 
-        # Avoid tempfile module on Windows due to permission/lock issues
+        # Download via the bot's own HTTP client so it respects the
+        # Cloudflare/proxy configuration set in TELEGRAM_API_BASE_URL.
+        # Using download_to_drive() opens a *new* direct httpx connection to
+        # api.telegram.org which bypasses the proxy and fails with ConnectError.
+        img_bytes = await file.download_as_bytearray()
+
+        # Write bytes to a local temp file for OCR (avoids Windows file locking)
         tmp_dir = Path("data/tmp")
         tmp_dir.mkdir(parents=True, exist_ok=True)
         tmp_path = str(tmp_dir / f"{uuid.uuid4()}.jpg")
-        
         try:
-            await file.download_to_drive(tmp_path)
-            
+            Path(tmp_path).write_bytes(img_bytes)
+            del img_bytes  # free memory before spawning OCR thread
+
             # Run OCR in a separate thread so it doesn't block the async event loop
             loop = asyncio.get_running_loop()
             ok, reason, ref = await loop.run_in_executor(
