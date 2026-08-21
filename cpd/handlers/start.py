@@ -5,7 +5,7 @@ from __future__ import annotations
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from cpd.constants import NAME, REG_IDENTITY, START_OPTIONS
+from cpd.constants import NAME, REG_IDENTITY, REG_KHMER, START_OPTIONS
 from cpd.handlers.common import _is_admin, send_start_message
 from cpd.i18n import t
 
@@ -56,7 +56,8 @@ async def on_start_option(update: Update,
         from cpd.handlers.pickup import start_pickup
         return await start_pickup(update, context)
     elif action == "register":
-        # Returning / recognized users go straight to the course list.
+        # Returning / recognized users go straight to the course list —
+        # unless their Khmer name is still unknown, which is asked once.
         from cpd.handlers.registration import (
             resolve_known_participant,
             show_registration_courses,
@@ -64,6 +65,11 @@ async def on_start_option(update: Update,
         known = await resolve_known_participant(update, context)
         if known is not None:
             context.user_data["reg_participant"] = known
+            if not (known.khmer_name or "").strip():
+                context.user_data["reg_known_pending_khmer"] = True
+                await query.edit_message_text(t("reg_ask_khmer_name"),
+                                              parse_mode="HTML")
+                return REG_KHMER
             return await show_registration_courses(update, context)
         # New user: ask license or name first to identify them.
         await query.edit_message_text(t("reg_ask_identity"), parse_mode="HTML")

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import logging
 
 from telegram import Update
@@ -15,6 +16,8 @@ from telegram.ext import (
     filters,
 )
 
+from cpd.config import ADMIN_IDS
+
 from cpd.constants import (
     MENU,
     NAME,
@@ -27,6 +30,7 @@ from cpd.constants import (
     REG_LICENSE,
     REG_LOCATION,
     REG_NAME,
+    REG_KHMER,
     REG_PAYMENT,
     REG_RECEIPT,
     REG_PHONE,
@@ -66,6 +70,7 @@ from cpd.handlers.registration import (
     on_reg_license,
     on_reg_location,
     on_reg_name,
+    on_reg_khmer,
     on_reg_phone,
 )
 from cpd.handlers.start import cmd_start, on_start_option
@@ -88,6 +93,26 @@ async def cmd_myid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await safe_reply_html(update, fmt("your_telegram_id", tid=update.effective_user.id))
 
 
+def _admin_gate(handler):
+    """Wrap a command handler so only ADMIN_IDS may use it.
+
+    Regular users get the "admin only" notice; /start and /cancel stay
+    available to everyone.
+    """
+    from cpd.handlers.common import safe_reply_html
+    from cpd.i18n import t
+
+    @functools.wraps(handler)
+    async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user = update.effective_user
+        if user is None or user.id not in ADMIN_IDS:
+            await safe_reply_html(update, t("admin_only"))
+            return ConversationHandler.END
+        return await handler(update, context)
+
+    return wrapped
+
+
 async def cmd_unlink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Unlink the current Telegram account from its participant record."""
     from cpd.handlers.common import safe_reply_html
@@ -108,9 +133,6 @@ async def _register_commands(app: Application) -> None:
     from telegram import BotCommand
     commands = [
         BotCommand("start", "Start / restart the bot"),
-        BotCommand("view", "View your CPD history"),
-        BotCommand("myid", "Show your Telegram ID"),
-        BotCommand("unlink", "Unlink your account"),
         BotCommand("cancel", "Cancel current action"),
     ]
     try:
@@ -166,6 +188,10 @@ def build_application() -> Application:
         MessageHandler(filters.TEXT & ~filters.COMMAND, on_reg_name),
         CommandHandler("cancel", cmd_cancel),
     ]
+    reg_khmer_handlers = [
+        MessageHandler(filters.TEXT & ~filters.COMMAND, on_reg_khmer),
+        CommandHandler("cancel", cmd_cancel),
+    ]
     reg_phone_handlers = [
         MessageHandler(filters.TEXT & ~filters.COMMAND, on_reg_phone),
         CommandHandler("cancel", cmd_cancel),
@@ -206,7 +232,7 @@ def build_application() -> Application:
     conversation = ConversationHandler(
         entry_points=[
             CommandHandler("start", cmd_start),
-            CommandHandler("view", cmd_view),
+            CommandHandler("view", _admin_gate(cmd_view)),
         ],
         states={
             START_OPTIONS: shared_handlers,
@@ -216,6 +242,7 @@ def build_application() -> Application:
             REG_COURSE: reg_course_handlers,
             REG_LICENSE: reg_text_handlers,
             REG_NAME: reg_name_handlers,
+            REG_KHMER: reg_khmer_handlers,
             REG_PHONE: reg_phone_handlers,
             REG_LOCATION: reg_location_handlers,
             REG_PAYMENT: reg_payment_handlers,
@@ -250,8 +277,8 @@ def build_application() -> Application:
         .build()
     )
     application.add_handler(conversation)
-    application.add_handler(CommandHandler("myid", cmd_myid))
-    application.add_handler(CommandHandler("unlink", cmd_unlink))
+    application.add_handler(CommandHandler("myid", _admin_gate(cmd_myid)))
+    application.add_handler(CommandHandler("unlink", _admin_gate(cmd_unlink)))
     application.add_handler(CommandHandler("admin_list", cmd_admin_list))
     application.add_handler(CommandHandler("admin_link", cmd_admin_link))
     application.add_handler(CommandHandler("admin_unlink", cmd_admin_unlink))

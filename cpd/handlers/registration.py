@@ -17,6 +17,7 @@ from telegram.ext import ContextTypes
 from cpd.constants import (
     REG_COURSE,
     REG_IDENTITY,
+    REG_KHMER,
     REG_LICENSE,
     REG_LOCATION,
     REG_NAME,
@@ -118,6 +119,7 @@ async def resolve_known_participant(update: Update, context: ContextTypes.DEFAUL
         return Participant(
             participant_id=prior.get("participant_id", ""),
             name=prior.get("name", ""),
+            khmer_name=prior.get("khmer_name", ""),
             phone=prior.get("phone", ""),
             department=prior.get("location", ""),
         )
@@ -168,6 +170,40 @@ async def send_courses_as_message(update: Update,
     )
 
 
+def _has_khmer(text: str) -> bool:
+    """True when the text contains Khmer (U+1780-U+17FF) characters."""
+    return any("\u1780" <= ch <= "\u17ff" for ch in text)
+
+
+def _store_name_by_script(context: ContextTypes.DEFAULT_TYPE, text: str) -> None:
+    """Save a typed name into the Khmer or Latin slot based on its script."""
+    if _has_khmer(text):
+        context.user_data["reg_khmer_name"] = text
+    else:
+        context.user_data["reg_name"] = text
+
+
+async def _ask_next_missing(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Ask for the first still-missing piece of the new-user flow.
+
+    Fixed order: Khmer name -> Latin name -> license -> phone. Every name
+    handler stores its input first and then funnels through here, so each
+    question is asked at most once and the flow can never loop.
+    """
+    if not context.user_data.get("reg_khmer_name"):
+        await safe_reply_html(update, t("reg_ask_khmer_name"))
+        return REG_KHMER
+    if not context.user_data.get("reg_name"):
+        await safe_reply_html(update, t("reg_ask_latin"))
+        return REG_NAME
+    if not context.user_data.get("reg_license"):
+        await safe_reply_html(update, t("reg_ask_license"))
+        return REG_LICENSE
+    await safe_reply_html(update, t("reg_ask_phone"))
+    return REG_PHONE
+
+
 async def on_reg_identity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """User typed a license number or full name to identify themselves."""
     from cpd.services.data_loader import Participant
@@ -194,6 +230,7 @@ async def on_reg_identity(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             known = Participant(
                 participant_id=prior.get("participant_id", ""),
                 name=prior.get("name", ""),
+                khmer_name=prior.get("khmer_name", ""),
                 phone=prior.get("phone", ""),
                 department=prior.get("location", ""),
             )
@@ -201,23 +238,18 @@ async def on_reg_identity(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         context.user_data["reg_participant"] = known
         context.user_data["reg_license"] = known.participant_id or ""
         context.user_data["reg_name"] = known.name or ""
+        context.user_data["reg_khmer_name"] = known.khmer_name or ""
         context.user_data["reg_phone"] = known.phone or ""
         context.user_data["reg_location"] = known.department or ""
         await send_courses_as_message(update, context)
         return REG_COURSE
-    # Not recognized -> new user. Capture license AND name (order depends on
-    # what they typed first), then phone + location.
-    if any(ch.isdigit() for ch in text):
+    # Not recognized -> new user. Keep whatever they typed in the right slot
+    # and walk the fixed order: Khmer name, Latin name, license, phone.
+    _store_name_by_script(context, text)
+    if any(ch.isdigit() for ch in text) and not _has_khmer(text):
         context.user_data["reg_license"] = text
-        if context.user_data.get("reg_name"):
-            await safe_reply_html(update, t("reg_ask_phone"))
-            return REG_PHONE
-        await safe_reply_html(update, t("reg_ask_name"))
-        return REG_NAME
-    # Looks like a name -> ask for the license number next.
-    context.user_data["reg_name"] = text
-    await safe_reply_html(update, t("reg_ask_license"))
-    return REG_LICENSE
+        context.user_data.pop("reg_name", None)
+    return await _ask_next_missing(update, context)
 
 
 async def on_reg_license(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -235,27 +267,40 @@ async def on_reg_license(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if known is not None:
         context.user_data["reg_participant"] = known
         context.user_data["reg_name"] = known.name or ""
+        context.user_data["reg_khmer_name"] = known.khmer_name or ""
         context.user_data["reg_phone"] = known.phone or ""
         context.user_data["reg_location"] = known.department or ""
         await send_courses_as_message(update, context)
         return REG_COURSE
 
-    # Name already given at the identity step -> skip straight to phone.
-    if context.user_data.get("reg_name"):
-        await safe_reply_html(update, t("reg_ask_phone"))
-        return REG_PHONE
-    await safe_reply_html(update, t("reg_ask_name"))
-    return REG_NAME
+    return await _ask_next_missing(update, context)
 
 
 async def on_reg_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Latin-name step; accepts whichever script the user types."""
     name = (update.effective_message.text or "").strip()
     if not name:
-        await safe_reply_html(update, t("reg_ask_name"))
+        await safe_reply_html(update, t("reg_ask_latin"))
         return REG_NAME
-    context.user_data["reg_name"] = name
-    await safe_reply_html(update, t("reg_ask_phone"))
-    return REG_PHONE
+    _store_name_by_script(context, name)
+    return await _ask_next_missing(update, context)
+
+
+async def on_reg_khmer(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
+    """Khmer-name step (first question for new users, one-off for known ones)."""
+    name = (update.effective_message.text or "").strip()
+    if not name:
+        await safe_reply_html(update, t("reg_ask_khmer_name"))
+        return REG_KHMER
+    _store_name_by_script(context, name)
+    if context.user_data.pop("reg_known_pending_khmer", None):
+        # Known user who only lacked a Khmer name -> save it and continue.
+        participant = context.user_data.get("reg_participant")
+        if participant is not None and not (participant.khmer_name or "").strip():
+            participant.khmer_name = context.user_data.get("reg_khmer_name", "")
+        await send_courses_as_message(update, context)
+        return REG_COURSE
+    return await _ask_next_missing(update, context)
 
 
 async def on_reg_phone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -279,6 +324,7 @@ async def on_reg_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     participant = Participant(
         participant_id=context.user_data.get("reg_license", ""),
         name=context.user_data.get("reg_name", ""),
+        khmer_name=context.user_data.get("reg_khmer_name", ""),
         phone=context.user_data.get("reg_phone", ""),
         department=location,
     )
@@ -338,6 +384,7 @@ async def start_payment(update: Update, context: ContextTypes.DEFAULT_TYPE,
         user_data={
             "participant": {
                 "name": participant.name,
+                "khmer_name": participant.khmer_name,
                 "participant_id": participant.participant_id,
                 "phone": participant.phone,
                 "location": participant.department,
@@ -558,6 +605,7 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
     append_registration({
         "telegram_id": update.effective_user.id,
         "name": participant.name,
+        "khmer_name": participant.khmer_name,
         "participant_id": participant.participant_id,
         "phone": participant.phone,
         "location": participant.department,
@@ -607,6 +655,7 @@ async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
     participant = Participant(
         participant_id=p.get("participant_id", ""),
         name=p.get("name", ""),
+        khmer_name=p.get("khmer_name", ""),
         phone=p.get("phone", ""),
         department=p.get("location", ""),
     )
@@ -625,6 +674,7 @@ async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
     append_registration({
         "telegram_id": pending.telegram_id,
         "name": participant.name,
+        "khmer_name": participant.khmer_name,
         "participant_id": participant.participant_id,
         "phone": participant.phone,
         "location": participant.department,

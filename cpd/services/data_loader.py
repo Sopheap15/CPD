@@ -522,6 +522,7 @@ class CpdData:
             if not name:
                 continue
             participant_id = (reg.get("participant_id") or "").strip()
+            khmer = (reg.get("khmer_name") or "").strip()
             phone = (reg.get("phone") or "").strip()
             location = (reg.get("location") or "").strip()
 
@@ -530,15 +531,19 @@ class CpdData:
                 p = Participant(
                     participant_id=participant_id,
                     name=name,
+                    khmer_name=khmer,
                     phone=phone,
                     department=location,
                 )
                 self.participants.append(p)
                 by_name[name.lower()] = p
-            elif participant_id and not p.participant_id:
-                p.participant_id = participant_id
-            elif phone and not p.phone:
-                p.phone = phone
+            else:
+                if participant_id and not p.participant_id:
+                    p.participant_id = participant_id
+                if khmer and not p.khmer_name:
+                    p.khmer_name = khmer
+                if phone and not p.phone:
+                    p.phone = phone
 
             course_title = (reg.get("course_title") or "").strip()
             course_date = (reg.get("course_date") or "").strip()

@@ -200,6 +200,18 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "Please enter your full name.",
         "សូមបញ្ចូលឈ្មោះពេញរបស់អ្នក។",
     ),
+    "reg_ask_khmer": (
+        "Please also type your name in Khmer (ឈ្មោះជាភាសាខ្មែរ).",
+        "សូមបញ្ចូលឈ្មោះជាភាសាខ្មែររបស់អ្នកផងដែរ។",
+    ),
+    "reg_ask_khmer_name": (
+        "Please enter your name in Khmer (ឈ្មោះជាភាសាខ្មែរ).",
+        "សូមបញ្ចូលឈ្មោះជាភាសាខ្មែររបស់អ្នក។",
+    ),
+    "reg_ask_latin": (
+        "Please also type your name in Latin letters (English).",
+        "សូមបញ្ចូលឈ្មោះរបស់អ្នកជាអក្សរឡាតាំង (អង់គ្លេស) ផងដែរ។",
+    ),
     "reg_confirm_old": (
         "Registered for course {course}.\nName: {name}\nLicense: {license}\n"
         "Date: {date}",

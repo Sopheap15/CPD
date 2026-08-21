@@ -21,6 +21,7 @@ REGISTRATION_COLUMNS = [
     "registered_at",
     "telegram_id",
     "name",
+    "khmer_name",
     "participant_id",
     "phone",
     "location",
@@ -56,7 +57,7 @@ def _ensure_columns() -> None:
     if not REGISTRATIONS_FILE.exists():
         return
     try:
-        with open(REGISTRATIONS_FILE, "r", encoding="utf-8") as fh:
+        with open(REGISTRATIONS_FILE, "r", encoding="utf-8-sig") as fh:
             reader = csv.DictReader(fh)
             header = reader.fieldnames or []
         if header == REGISTRATION_COLUMNS:
@@ -65,7 +66,9 @@ def _ensure_columns() -> None:
         return
     rows = load_registrations()
     REGISTRATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(REGISTRATIONS_FILE, "w", newline="", encoding="utf-8") as fh:
+    # utf-8-sig writes a BOM so Excel auto-detects UTF-8 and shows Khmer
+    # text correctly instead of mojibake.
+    with open(REGISTRATIONS_FILE, "w", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=REGISTRATION_COLUMNS)
         writer.writeheader()
         for r in rows:
@@ -82,11 +85,14 @@ def append_registration(record: dict) -> None:
 
     REGISTRATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
     new_file = not REGISTRATIONS_FILE.exists()
+    if new_file:
+        # utf-8-sig writes the BOM Excel needs to detect UTF-8 (Khmer names).
+        with open(REGISTRATIONS_FILE, "w", newline="",
+                  encoding="utf-8-sig") as fh:
+            csv.DictWriter(fh, fieldnames=REGISTRATION_COLUMNS).writeheader()
     with open(REGISTRATIONS_FILE, "a", newline="", encoding="utf-8") as fh:
         writer = csv.DictWriter(fh, fieldnames=REGISTRATION_COLUMNS)
-        if new_file:
-            writer.writeheader()
-        elif not _file_ends_with_newline():
+        if not _file_ends_with_newline():
             # csv module writes with its own line terminator; a file that was
             # hand-edited (or left without a trailing newline) would otherwise
             # merge this row onto the previous line.
@@ -134,7 +140,9 @@ def load_registrations() -> list[dict]:
     if not REGISTRATIONS_FILE.exists():
         return []
     try:
-        with open(REGISTRATIONS_FILE, "r", encoding="utf-8") as fh:
+        # utf-8-sig transparently strips the BOM (if present) so column
+        # names stay clean.
+        with open(REGISTRATIONS_FILE, "r", encoding="utf-8-sig") as fh:
             return list(csv.DictReader(fh))
     except Exception:
         return []
@@ -259,7 +267,8 @@ def clear_registrations() -> int:
 
 def _write(rows: list[dict]) -> None:
     REGISTRATIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    with open(REGISTRATIONS_FILE, "w", newline="", encoding="utf-8") as fh:
+    # utf-8-sig keeps the BOM so Excel keeps showing Khmer correctly.
+    with open(REGISTRATIONS_FILE, "w", newline="", encoding="utf-8-sig") as fh:
         writer = csv.DictWriter(fh, fieldnames=REGISTRATION_COLUMNS)
         writer.writeheader()
         writer.writerows(rows)

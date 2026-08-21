@@ -103,7 +103,9 @@ async def send_start_message(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
 def clear_registration_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     """Drop all half-finished registration data for this user."""
     for key in ("reg_course_id", "reg_course", "reg_license",
-                "reg_name", "reg_phone", "reg_location", "reg_participant"):
+                "reg_name", "reg_khmer_name", "reg_phone",
+                "reg_location", "reg_participant",
+                "reg_known_pending_khmer"):
         context.user_data.pop(key, None)
 
 
