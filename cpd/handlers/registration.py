@@ -423,19 +423,29 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     await safe_reply_html(update, "🔍 កំពុងពិនិត្យវិកាយបត្ររបស់អ្នក...")
 
-    file = await context.bot.get_file(file_id)
-
-    # Download to a temp file
-    with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-        tmp_path = tmp.name
+    # Never let the receipt step hang: catch any failure.
     try:
-        await file.download_to_drive(tmp_path)
-        ok, reason, _ = verify_receipt(tmp_path, pending.amount)
-    finally:
+        file = await context.bot.get_file(file_id)
+
+        # Download to a temp file
+        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
+            tmp_path = tmp.name
         try:
-            os.unlink(tmp_path)
-        except OSError:
-            pass
+            await file.download_to_drive(tmp_path)
+            ok, reason, _ = verify_receipt(tmp_path, pending.amount)
+        finally:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+    except Exception as exc:
+        logger.error("Receipt download/OCR failed for chat %s: %s", chat_id, exc)
+        await safe_reply_html(
+            update,
+            "⚠️ មិនអាចអានវិកាយបត្របានទេ។ "
+            "សូមផ្ញើរូបភាពច្បាស់ដាងនេះ ឬទាកទងអ្នករៀបចំ។",
+        )
+        return REG_RECEIPT
 
     if ok:
         await finalize_paid_registration(context, pending, verified=True)

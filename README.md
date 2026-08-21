@@ -33,6 +33,147 @@ Data lives in Excel files, so staff update it without any code.
 Both the registration list and every CPD report end with a professional contact
 note (CPD officer phone/Telegram).
 
+## Quick start (deploy & run)
+
+The bot is a normal Python app you run on any machine (PC, laptop, VPS).
+It uses long-polling — **no public URL or web server is needed** to run it.
+
+### 1. Install pixi (once) and clone the repo
+
+Windows:
+```powershell
+irm https://pixi.sh/install.ps1 | iex
+git clone git@github.com:Sopheap15/CPD.git
+cd CPD
+```
+
+macOS / Linux:
+```bash
+curl -fsSL https://pixi.sh/install.sh | bash
+git clone git@github.com:Sopheap15/CPD.git
+cd CPD
+```
+
+### 2. Create your bot token
+
+Message **@BotFather** on Telegram → `/newbot` → copy the token
+(it looks like `123456789:AA...`). Keep it private.
+
+### 3. Create your `.env`
+
+```powershell
+Copy-Item .env.example .env
+```
+
+Then edit `.env` and at minimum set:
+```
+TELEGRAM_BOT_TOKEN=123456789:AAAyour_bot_token_here
+```
+
+(Optional) If your internet provider blocks Telegram directly, route the bot
+through a **Cloudflare Worker** (you write ~10 lines of JavaScript in
+[Cloudflare Workers](https://workers.cloudflare.com) — see "Cloudflare Worker
+proxy" below). If you have one, uncomment and set:
+```
+TELEGRAM_API_BASE_URL=https://your-worker.yourname.workers.dev/bot
+```
+
+### 4. Install everything you need (once)
+
+```powershell
+pixi install
+```
+
+### 5. Put your real Excel files in `data/`
+
+Drop your courses + registration workbooks into the `data/` folder. Files
+auto-reload when changed, so you can edit them while the bot runs.
+
+### 6. Run the bot
+
+Windows (foreground, Ctrl-C to stop):
+```powershell
+.\run.ps1 start
+```
+
+Windows (background — keeps running after you close the terminal):
+```powershell
+Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\CPD"
+```
+
+macOS / Linux:
+```bash
+nohup ./run.sh start > data/cpd.out 2> data/cpd.err &
+```
+
+You should see logs ending with `Application started` — your bot is now online.
+
+### Run two bots at once (e.g. CPD + Clerkship)
+
+Each project is fully self-contained in its own folder with its own `.env` and
+its own `.pixi` environment. Just start each one in its own directory:
+
+```powershell
+cd C:\Users\osopheap\Desktop\CPD
+Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\CPD"
+
+cd C:\Users\osopheap\Desktop\Clerkship_bot
+Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\Clerkship_bot"
+```
+
+They run side-by-side without conflicting.
+
+## Cloudflare Worker (Telegram API proxy)
+
+If your network blocks `api.telegram.org` directly (common on some ISPs — you
+get `httpx.ConnectError` on startup), route the bot through a free Cloudflare
+Worker instead:
+
+1. Go to [workers.cloudflare.com](https://workers.cloudflare.com) → create a
+   Worker.
+2. Paste this code and **Deploy**:
+
+```javascript
+export default {
+  async fetch(request) {
+    const url = new URL(request.url);
+    if (url.pathname === "/") {
+      return new Response("CPD Track bot Telegram API proxy. Use /bot<token>/<method>", { status: 200 });
+    }
+    url.protocol = "https:";
+    url.host = "api.telegram.org";
+    return fetch(new Request(url.toString(), request));
+  },
+};
+```
+
+3. Your Worker now has a URL like
+   `https://cpdtracking.yourname.workers.dev`.
+4. In `.env`, set:
+   ```
+   TELEGRAM_API_BASE_URL=https://cpdtracking.yourname.workers.dev/bot
+   ```
+   (note the `/bot` suffix — the bot appends its token to it automatically).
+5. Restart the bot:
+   ```powershell
+   .\run.ps1 stop
+   .\run.ps1 start
+   ```
+
+To confirm it works, the bot should log `Application started` instead of
+`ConnectError`. You can also check older projects already using this approach
+(e.g. `run.ps1` in `C:\Users\osopheap\Desktop\CPD`).
+
+## Troubleshooting connection errors
+
+- **`httpx.ConnectError` on startup** → your network can't reach
+  `api.telegram.org`. Either wait/change network, or add the Cloudflare Worker
+  proxy above.
+- **`Application started` but the bot doesn't reply** → make sure the token in
+  `.env` matches the one @BotFather gave you.
+- **`InvalidURL: Invalid port: ...`** → the `.env` file is malformed. Replace it
+  with a clean copy of `.env.example` and re-enter your values.
+
 ## Data files (in `data/`)
 
 | File                     | Purpose                                                                                                        |
@@ -186,7 +327,7 @@ processes.
 
 Windows (PowerShell):
 ```powershell
-Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\CPD_track"
+Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\CPD"
 ```
 
 macOS / Linux:
