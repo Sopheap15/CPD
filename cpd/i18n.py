@@ -13,26 +13,26 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "សូមស្វាគមន៍! សូមជ្រើសរើសសេវាកម្ម",
     ),
     "ask_name": (
-        "Please enter your full name to view your CPD history (e.g. Sokha Chan).",
-        "សូមបញ្ចូលឈ្មោះពេញរបស់អ្នកដើម្បីមើលប្រវត្តិ CPD (ឧទាហរណ៍៖ សុខា ចាន់ / Sokha Chan)។",
+        "Please enter your name to view your CPD history!",
+        "សូមបញ្ចូលឈ្មោះរបស់អ្នកដើម្បីមើលប្រវត្តិ CPD!",
     ),
-    "cancel": ("Search cancelled.", "បានលុបចោលការស្វែងរក។"),
+    "cancel": ("Search cancelled.", "បានលុបចោលការស្វែងរក!"),
     "cancel_hint": (
         "You can send /cancel at any time to stop.",
-        "អ្នកអាចផ្ញើ /cancel បានគ្រប់ពេល ដើម្បីបញ្ឈប់។",
+        "អ្នកអាច /cancel បានគ្រប់ពេល ដើម្បីបញ្ឈប់",
     ),
     "ask_verification": (
-        "Please enter your Phone Number or License ID to verify your account and view your CPD history.",
-        "សូមបញ្ចូល លេខទូរស័ព្ទ ឬ លេខបញ្ជិកា របស់អ្នក ដើម្បីផ្ទៀងផ្ទាត់គណនី និងមើលប្រវត្តិ CPD របស់អ្នក។",
+        "Please enter your Name or Phone Number to view your CPD",
+        "សូមបញ្ចូល ឈ្មោះ ឬ លេខទូរស័ព្ទ ដើម្បីមើលប្រវត្តិ CPD",
     ),
     "pickup_ask_name": (
-        "Please enter the full name of the pharmacist whose certificate(s) you are here to pick up.",
-        "សូមបញ្ចូលឈ្មោះពេញរបស់ឱសថការី ដែលអ្នកមកទទួលវិញ្ញាបនបត្រ។",
+        "Please enter the name of the pharmacist whose certificate(s) you are here to pick up.",
+        "សូមបញ្ចូលឈ្មោះរបស់ឱសថការី ដែលអ្នកមកទទួលវិញ្ញាបនបត្រ។",
     ),
     "pickup_name_not_found": (
         "We could not find <b>{name}</b> in the system. Please check the "
-        "spelling and try again, or type the license number instead.",
-        "រកមិនឃើញ <b>{name}</b> នៅក្នុងប្រព័ន្ធ។ សូមពិនិត្យអក្ខរាវិរុទ្ធ រួចព្យាយាមម្តងទៀត ឬបញ្ចូលលេខអាជ្ញាបណ្ណជំនួសវិញ។",
+        "spelling and try again, or type the phone number instead.",
+        "រកមិនឃើញ <b>{name}</b> នៅក្នុងប្រព័ន្ធ។ សូមពិនិត្យអក្ខរាវិរុទ្ធ រួចព្យាយាមម្ដងទៀត ឬបញ្ចូលលេខទូរស័ព្ទជំនួសវិញ។",
     ),
     "pickup_who": (
         "Who is collecting the certificate(s)?",
@@ -41,21 +41,21 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
     "pickup_self": ("The owner (myself)", "ម្ចាស់ខ្លួន"),
     "pickup_other": ("Someone else", "អ្នកផ្សេង"),
     "pickup_ask_picker": (
-        "Please enter the full name of the person who came to pick up the certificate(s).",
-        "សូមបញ្ចូលឈ្មោះពេញរបស់អ្នកដែលមកទទួលវិញ្ញាបនបត្រ។",
+        "Please enter the name of the person who came to pick up the certificate(s).",
+        "សូមបញ្ចូលឈ្មោះរបស់អ្នកដែលមកទទួលវិញ្ញាបនបត្រ។",
     ),
     "pickup_ask_course": (
-        "Which course certificate(s) are you collecting? Tap each course to "
-        "select it, then confirm. You can select more than one.",
-        "តើអ្នកមកទទួលវិញ្ញាបនបត្រនៃវគ្គណាខ្លះ? សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាល រួចបញ្ជាក់។ អ្នកអាចជ្រើសរើសបានច្រើន។",
+        "Which course certificate(s) are you collecting? Tap course to "
+        "select it, then confirm.",
+        "តើអ្នកមកទទួលវិញ្ញាបនបត្រនៃវគ្គណាខ្លះ? សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាល រួចចុចបញ្ជាក់។",
     ),
     "pickup_confirm": (
         "Confirm",
         "បញ្ជាក់",
     ),
     "pickup_confirm_none": (
-        "Please select at least one course before confirming.",
-        "សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាលយ៉ាងហោចណាស់មួយ មុនពេលបញ្ជាក់។",
+        "Please select at least one course before confirming",
+        "សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាលយ៉ាងហោចណាស់មួយ មុនពេលចុចបញ្ជាក់",
     ),
     "pickup_no_courses": (
         "There are no completed courses to pick up certificates for.",
@@ -96,22 +96,22 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "បានលុបចោលការកត់ត្រាការទទួលវិញ្ញាបនបត្រ។",
     ),
     "ask_admin_view": (
-        "Please enter the Name, Phone Number, or License ID of the person you want to view.",
-        "សូមបញ្ចូល ឈ្មោះ, លេខទូរស័ព្ទ ឬ លេខបញ្ជិកា របស់អ្នកដែលអ្នកចង់មើល។",
+        "Please enter the Name or Phone Number of the person you want to view.",
+        "សូមបញ្ចូល ឈ្មោះ ឬ លេខទូរស័ព្ទ របស់អ្នកដែលអ្នកចង់មើល។",
     ),
     "account_linked": (
         "Your account is linked successfully! Welcome {name}.",
         "គណនីរបស់អ្នកត្រូវបានភ្ជាប់ដោយជោគជ័យ! សូមស្វាគមន៍ {name}។",
     ),
     "not_found_verification": (
-        "No participant found with that Phone Number or License ID.\nPlease try again.",
-        "រកមិនឃើញអ្នកចូលរួមដែលមានលេខទូរស័ព្ទ ឬ លេខបញ្ជិកានោះទេ។\nសូមព្យាយាមម្ដងទៀត។",
+        "No participant found with that Phone Number.\nPlease try again.",
+        "រកមិនឃើញអ្នកចូលរួមដែលមានលេខទូរស័ព្ទនេះទេ។\nសូមព្យាយាមម្ដងទៀត។",
     ),
     "not_found": (
         "No participant found with the name \"{name}\".\n"
-        "Please check the spelling, or try your family name only (e.g. \"Chan\").",
-        "រកមិនឃើញអ្នកចូលរួមដែលមានឈ្មោះ \"{name}\" ទេ។\n"
-        "សូមពិនិត្យអក្ខរាវិរុទ្ធ ឬសាកល្បងតែគោត្តនាម (ឧ. \"ចាន់ / Chan\")។",
+        "Please check the spelling, or try phone number!",
+        "រកមិនឃើញអ្នកចូលរួមដែលមានឈ្មោះ \"{name}\" ទេ\n"
+        "សូមពិនិត្យអក្ខរាវិរុទ្ធ ឬសាកល្បងលេខទូរស័ព្ទ!",
     ),
     "multiple_matches": (
         "I found {count} participants with a similar name. Please choose one:",
@@ -164,7 +164,7 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
     ),
     "loading_error": (
         "The CPD data files could not be loaded. Please contact the administrator.",
-        "មិនអាចផ្ទុកឯកសារទិន្នន័យ CPD បានទេ។ សូមទាក់ទងអ្នកគ្រប់គ្រង។",
+        "មិនអាចបើកឯកសារទិន្នន័យ CPD បានទេ។ សូមទាក់ទងអ្នកគ្រប់គ្រង។",
     ),
     "view_history": ("View History", "មើលប្រវត្តិ"),
     "further_info": (
@@ -177,40 +177,40 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាលដែលអ្នកចង់ចុះឈ្មោះ៖",
     ),
     "reg_already": (
-        "You have already registered for this course.",
-        "អ្នកបានចុះឈ្មោះសម្រាប់វគ្គនេះរួចហើយ។",
+        "You have already registered for this course!",
+        "អ្នកបានចុះឈ្មោះសម្រាប់វគ្គនេះរួចហើយ!",
     ),
     "reg_ask_identity": (
-        "Please enter your full name.",
-        "សូមបញ្ចូលឈ្មោះពេញរបស់អ្នក។",
+        "Please enter your name!",
+        "សូមបញ្ចូលឈ្មោះរបស់អ្នក!",
     ),
     "reg_ask_license": (
-        "Please enter your pharmacist license number (លេខបញ្ជិកាឱសថការី).",
-        "សូមបញ្ចូលលេខបញ្ជិកាឱសថការីរបស់អ្នក។",
+        "Please enter your pharmacist license number!",
+        "សូមបញ្ចូលលេខបញ្ជិកាឱសថការីរបស់អ្នក!",
     ),
     "reg_ask_phone": (
-        "Please enter your phone number.",
-        "សូមបញ្ចូលលេខទូរស័ព្ទរបស់អ្នក។",
+        "Please enter your phone number!",
+        "សូមបញ្ចូលលេខទូរស័ព្ទរបស់អ្នក!",
     ),
     "reg_ask_location": (
-        "Please enter your pharmacist council membership.",
-        "សមាជិកគណៈឱសថការី",
+        "Please enter your​ location pharmacist council membership!",
+        "សូមបញ្ចូលទីតាំងសមាជិកគណៈឱសថការីរបស់អ្នក!",
     ),
     "reg_ask_name": (
-        "Please enter your full name.",
-        "សូមបញ្ចូលឈ្មោះពេញរបស់អ្នក។",
+        "Please enter your name!",
+        "សូមបញ្ចូលឈ្មោះរបស់អ្នក!",
     ),
     "reg_ask_khmer": (
-        "Please also type your name in Khmer (ឈ្មោះជាភាសាខ្មែរ).",
-        "សូមបញ្ចូលឈ្មោះជាភាសាខ្មែររបស់អ្នកផងដែរ។",
+        "Please also type your name in Khmer!",
+        "សូមបញ្ចូលឈ្មោះជាភាសាខ្មែររបស់អ្នក!",
     ),
     "reg_ask_khmer_name": (
-        "Please enter your name in Khmer (ឈ្មោះជាភាសាខ្មែរ).",
-        "សូមបញ្ចូលឈ្មោះជាភាសាខ្មែររបស់អ្នក។",
+        "Please enter your name in Khmer!",
+        "សូមបញ្ចូលឈ្មោះជាភាសាខ្មែររបស់អ្នក!",
     ),
     "reg_ask_latin": (
-        "Please also type your name in Latin letters (English).",
-        "សូមបញ្ចូលឈ្មោះរបស់អ្នកជាអក្សរឡាតាំង (អង់គ្លេស) ផងដែរ។",
+        "Please also type your name in Latin letters (English)!",
+        "សូមបញ្ចូលឈ្មោះរបស់អ្នកជាអក្សរឡាតាំង (អង់គ្លេស) ផងដែរ!",
     ),
     "reg_confirm_old": (
         "Registered for course {course}.\nName: {name}\nLicense: {license}\n"
