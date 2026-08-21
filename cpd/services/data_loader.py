@@ -118,6 +118,10 @@ class Training:
     cpd_points: str = ""
     hours: str = ""
     status: str = ""
+    source: str = ""          # "bot" when created from in_bot_registrations.csv
+    picked_up: bool = False   # certificate collected (from CSV pickup rows)
+    pickup_date: str = ""
+    pickup_by: str = ""
 
 
 @dataclass
@@ -400,6 +404,7 @@ class CpdData:
                 self.participants, self.trainings, self.certificates = load_dfs(
                     self._google_reg_dfs, self._google_cert_dfs
                 )
+                self._merge_registrations()
                 self._rebuild_indices()
                 self._loaded = True
                 return
@@ -509,8 +514,8 @@ class CpdData:
 
             if (reg.get("status") or "").strip() == "Picked up":
                 # Pickup rows record that a certificate was collected. Apply
-                # the pickup to the matching certificate instead of creating a
-                # training record.
+                # the pickup to the matching certificate and to the bot
+                # registration so the history report reflects it.
                 _apply_pickup_to_certificates(
                     self.certificates, p.name,
                     course_id=(reg.get("course_id") or "").strip(),
@@ -519,11 +524,48 @@ class CpdData:
                     pickup_at=(reg.get("pickup_at") or "").strip(),
                     pickup_by=(reg.get("pickup_by") or "").strip(),
                 )
+                matched = None
+                for t in self.trainings:
+                    if t.source != "bot":
+                        continue
+                    if p.participant_id and t.participant_id != p.participant_id:
+                        continue
+                    if course_title and (t.title or "").strip().lower() != course_title.lower():
+                        continue
+                    if course_date and (t.date or "").strip() != course_date:
+                        continue
+                    matched = t
+                    break
+                if matched is not None:
+                    matched.picked_up = True
+                    matched.pickup_date = (reg.get("pickup_at") or "").strip()
+                    matched.pickup_by = (reg.get("pickup_by") or "").strip()
+                else:
+                    # Pickup row without a prior Paid row: still show the course.
+                    self.trainings.append(
+                        Training(
+                            participant_id=p.participant_id,
+                            participant_name=p.name,
+                            title=course_title or (reg.get("course_id") or "").strip(),
+                            date=course_date,
+                            cpd_points=points,
+                            status="Picked up",
+                            source="bot",
+                            picked_up=True,
+                            pickup_date=(reg.get("pickup_at") or "").strip(),
+                            pickup_by=(reg.get("pickup_by") or "").strip(),
+                        )
+                    )
                 continue
 
             if not course_title and not (reg.get("course_id") or "").strip():
                 # Legacy pickup-only rows carry no course, so they must not
                 # create a bogus training record.
+                continue
+            status = (reg.get("status") or "").strip().lower()
+            if status and status != "paid":
+                # Unconfirmed registrations (pending payment, cancelled, ...)
+                # are not real course attendance yet.
                 continue
             self.trainings.append(
                 Training(
@@ -533,6 +575,7 @@ class CpdData:
                     date=course_date,
                     cpd_points=points,
                     status="Registered",
+                    source="bot",
                 )
             )
 
@@ -575,36 +618,48 @@ class CpdData:
         return None
 
     def trainings_for(self, participant_id: str = "", participant_name: str = "", khmer_name: str = "") -> list[Training]:
-        out = []
-        seen = set()
+        out: list[Training] = []
+        seen_rows: set[int] = set()
+        seen_courses: set[tuple[str, str]] = set()
+
+        def _add(t: Training) -> None:
+            # History is based on in-bot registrations (the CSV) only.
+            if t.source != "bot":
+                return
+            if id(t) in seen_rows:
+                return
+            # One entry per unique course session: repeated attendance rows
+            # for the same course on the same day count once.
+            key = ((t.title or "").strip().lower(), (t.date or "").strip())
+            if key in seen_courses:
+                return
+            seen_rows.add(id(t))
+            seen_courses.add(key)
+            out.append(t)
+
         if participant_id:
             for t in self._trainings_by_id.get(participant_id, []):
-                out.append(t)
-                seen.add(id(t))
-        
+                _add(t)
+
         names_to_check = [n for n in (participant_name, khmer_name) if n]
         for name in names_to_check:
             # 1. Exact match (case-insensitive)
             for t in self._trainings_by_name.get(name.lower(), []):
-                if id(t) not in seen:
-                    out.append(t)
-                    seen.add(id(t))
-            
+                _add(t)
+
             # 2. Normalized match fallback
             from cpd.services.search import normalize_name
             norm_name = normalize_name(name)
             if not norm_name:
                 continue
-                
+
             for t in self.trainings:
-                if id(t) not in seen:
-                    t_name = normalize_name(t.participant_name or "")
-                    if norm_name and (
-                        norm_name == t_name or
-                        norm_name in t_name or t_name in norm_name
-                    ):
-                        out.append(t)
-                        seen.add(id(t))
+                t_name = normalize_name(t.participant_name or "")
+                if norm_name and (
+                    norm_name == t_name or
+                    norm_name in t_name or t_name in norm_name
+                ):
+                    _add(t)
 
         return out
 

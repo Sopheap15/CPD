@@ -134,11 +134,11 @@ def _cert_status_for_trainings(
     trainings: list[Training], certificates: list[Certificate],
     courses: Iterable[Course] | None = None,
 ) -> list[str]:
-    """Show certificate status per attended course.
+    """One line per registered course (in_bot_registrations.csv based).
 
-    For each training, look up the matching course (by title or date). If the
-    course's certificate is not ready yet, tell the participant it is not
-    ready. If a pickup record exists, show the pickup status as before.
+    - Picked up -> the certificate was collected (CSV pickup row)
+    - Ready     -> the course says its certificate is ready (courses.xlsx)
+    - Not ready -> otherwise
     """
     course_list = list(courses) if courses else []
 
@@ -155,54 +155,33 @@ def _cert_status_for_trainings(
                 return c
         return None
 
-    if not certificates:
-        # No one has come to pick up yet. Still report readiness for the
-        # attended courses so trainees know whether to come or wait.
-        lines = []
-        for tr in sorted(trainings, key=lambda tr: tr.date or "", reverse=True):
-            course = _course_for(tr)
-            if course is None:
-                continue
-            title = course.title if course.title else _date(tr.date)
-            if course.certificate_ready:
-                status = inline("cert_ready")
-            else:
-                status = inline("cert_not_ready")
-            lines.append(f"• <b>{_esc(status)}</b> · {_esc(title)}")
-        return lines
-
     lines = []
-    for c in sorted(certificates, key=lambda c: c.training_title or "", reverse=True):
-        # Find the matching training by comparing study date to training date
-        study_date = c.training_title.strip() if c.training_title else ""
-        matched_tr = None
-        for tr in trainings:
-            if tr.date and study_date and tr.date.startswith(study_date):
-                matched_tr = tr
-                break
-
+    for tr in sorted(trainings, key=lambda tr: tr.date or "", reverse=True):
         title_bits = []
-        if matched_tr:
-            if matched_tr.title:
-                title_bits.append(_esc(matched_tr.title))
-            if matched_tr.organizer:
-                title_bits.append(f"({_esc(matched_tr.organizer)})")
-        elif study_date:
-            title_bits.append(_esc(study_date))
-        title_str = " · ".join(title_bits) if title_bits else ""
+        if tr.title:
+            title_bits.append(_esc(tr.title))
+        if tr.organizer:
+            title_bits.append(f"({_esc(tr.organizer)})")
+        title_str = " · ".join(title_bits)
 
-        status = inline("picked_up") if c.picked_up else inline("not_picked_up")
-        line = f"• <b>{_esc(status)}</b>"
-        if title_str:
-            line += f" · {title_str}"
-        if c.picked_up and c.pickup_date:
-            extra = f"បានទទួលថ្ងៃទី {_esc(_date(c.pickup_date))}"
-            pb = c.pickup_by.strip() if c.pickup_by else ""
+        if tr.picked_up:
+            if tr.pickup_date:
+                extra = f"បានទទួលថ្ងៃទី {_esc(_date(tr.pickup_date))}"
+            else:
+                extra = _esc(inline("picked_up"))
+            pb = (tr.pickup_by or "").strip()
             if pb and pb.lower() not in ("nan", "-", "n/a"):
                 extra += f" ដោយ {_esc(pb)}"
             line = f"• {extra}"
+            if title_str:
+                line += f" · {title_str}"
         else:
-            status = inline("not_picked_up")
+            course = _course_for(tr)
+            status = (
+                inline("cert_ready")
+                if course is not None and course.certificate_ready
+                else inline("cert_not_ready")
+            )
             line = f"• <b>{_esc(status)}</b>"
             if title_str:
                 line += f" · {title_str}"
@@ -226,16 +205,15 @@ def _counts(trainings: Iterable[Training], certificates: Iterable[Certificate]) 
         except ValueError:
             pass
 
-    picked = sum(1 for c in certificates if c.picked_up)
+    picked = sum(1 for tr in trainings if tr.picked_up)
 
     lines = [
         _row("ចំនួនវគ្គបណ្ដុះបណ្ដាលសរុប", str(len(trainings))),
         _row("ពិន្ទុ CPD សរុប", f"{total_points:g}" if total_points else "0"),
     ]
     if trainings:
-        # Expected = one cert per training session
-        # picked   = certificates confirmed received
-        # (cert records only exist when someone came to the office)
+        # Expected = one cert per attended course
+        # picked   = courses whose certificate pickup is confirmed
         total_expected = len(trainings)
         lines.append(_row("វិញ្ញាបនបត្រដែលបានទទួល", f"{picked} / {total_expected}"))
         lines.append(_row("វិញ្ញាបនបត្រមិនទាន់ទទួល", str(total_expected - picked)))
