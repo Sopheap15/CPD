@@ -396,7 +396,6 @@ cpd/
     search.py      #   fuzzy name matching
     formatter.py   #   report rendering (bilingual)
     real_data.py   #   parses the master "Transformed ... with Certificates" workbook
-    google_sheets.py # live Google Sheets fetch (optional)
     storage.py     #   Telegram-ID <-> participant-name links
 data/              # Excel data files (+ runtime in_bot_registrations.csv, telegram_links.json)
 pixi.toml          # environment definition (Python + libraries)

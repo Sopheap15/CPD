@@ -294,10 +294,6 @@ class CpdData:
         self._data_dir = Path(data_dir or DATA_DIR)
         self._lock = threading.RLock()
         self._mtime: dict[str, int] = {}
-        self._last_google_refresh = 0.0
-        self._google_reg_dfs: list[Any] = []
-        self._google_cert_dfs: list[Any] = []
-        self._google_digest = ""
         self.participants: list[Participant] = []
         self.trainings: list[Training] = []
         self.certificates: list[Certificate] = []
@@ -322,60 +318,10 @@ class CpdData:
             mtimes[str(REGISTRATIONS_FILE)] = int(REGISTRATIONS_FILE.stat().st_mtime)
         return mtimes
 
-    def _maybe_refresh_google(self) -> bool:
-        """Query Google Sheets at an interval; return True if data changed."""
-        from cpd.services import google_sheets
-        from cpd.config import (
-            GS_ID_R,
-            GS_ID_C,
-            GOOGLE_SHEET_REFRESH_MINUTES,
-            GOOGLE_SHEET_SHEET_NAMES,
-        )
-        from cpd.services.real_data import df_kind
-
-        if not GS_ID_R:
-            return False
-        now = time.time()
-        interval = GOOGLE_SHEET_REFRESH_MINUTES * 60
-        if self._last_google_refresh and now - self._last_google_refresh < interval:
-            return False
-        self._last_google_refresh = now
-
-        reg, cert = [], []
-        for sid in (GS_ID_R, GS_ID_C):
-            if not sid:
-                continue
-            for df in google_sheets.fetch_tabs(
-                sid, sheet_names=GOOGLE_SHEET_SHEET_NAMES
-            ).values():
-                kind = df_kind(df) if not df.empty else None
-                if kind == "registration":
-                    reg.append(df)
-                elif kind == "certificate":
-                    cert.append(df)
-        if not reg and not cert:
-            logger.warning(
-                "No CPD response tabs found in Google Sheets %s. Make each "
-                "sheet shared with 'Anyone with the link -> Viewer'.",
-                GS_ID_R,
-            )
-            return False
-
-        digest = hashlib.sha1(f"{len(reg)},{len(cert)}:{reg}{cert}".encode()).hexdigest()
-        if digest != self._google_digest:
-            self._google_digest = digest
-            self._google_reg_dfs, self._google_cert_dfs = reg, cert
-            logger.info("Google Sheets data updated (%d reg, %d cert tabs)",
-                        len(reg), len(cert))
-            return True
-        return False
-
     def ensure_loaded(self) -> None:
         """Reload if any file changed on disk. Safe to call on every request."""
         with self._lock:
             changed = not self._loaded
-            if self._maybe_refresh_google():
-                changed = True
             mtimes = self._file_mtimes()
             if set(mtimes) != set(self._mtime):
                 changed = True
@@ -428,19 +374,7 @@ class CpdData:
                         )
                     )
 
-            # Prefer live Google Sheets tabs when they are configured.
-            if self._google_reg_dfs or self._google_cert_dfs:
-                from cpd.services.real_data import load_dfs
-
-                self.participants, self.trainings, self.certificates = load_dfs(
-                    self._google_reg_dfs, self._google_cert_dfs
-                )
-                self._merge_registrations()
-                self._rebuild_indices()
-                self._loaded = True
-                return
-
-            # Otherwise use the real Google-Forms xlsx exports when present.
+            # Use the Google-Forms xlsx exports when present.
             from cpd.services.real_data import load_real_data
 
             real = load_real_data(self._data_dir)

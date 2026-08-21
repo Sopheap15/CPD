@@ -179,19 +179,6 @@ def _is_certificate_file(path: Path) -> bool:
     )
 
 
-def df_kind(df: pd.DataFrame) -> str | None:
-    """Classify a response tab: 'registration', 'certificate', or None."""
-    cols = [str(c) for c in df.columns]
-    if any("ឈ្មោះជាភាសាឡាតាំង" in c or "ឡាតាំង" in c or "English" in c for c in cols) or any(
-        str(c).startswith("ប្រធានបទ") for c in cols
-    ):
-        return "registration"
-    if any("Confirm By Delivery Team" in c for c in cols) or any(
-        kw in c for c in cols for kw in ["ឈ្មោះឱសថការី", "អង់គ្លេស", "English"]
-    ):
-        return "certificate"
-    return None
-
 
 def _dedup_participants(participants: list[Participant]) -> list[Participant]:
     seen: dict[str, Participant] = {}
@@ -320,25 +307,6 @@ def transformed_from_df(
 
     return _dedup_participants(participants), trainings, certificates
 
-
-def load_dfs(
-    reg_dfs: list[pd.DataFrame], cert_dfs: list[pd.DataFrame]
-) -> tuple[list[Participant], list[Training], list[Certificate]]:
-    """Parse registration and certificate response tabs (e.g. from Google)."""
-    participants: list[Participant] = []
-    trainings: list[Training] = []
-    for df in reg_dfs:
-        ps, ts = registration_from_df(df)
-        participants.extend(ps)
-        trainings.extend(ts)
-
-    participants = _dedup_participants(participants)
-
-    certificates: list[Certificate] = []
-    for df in cert_dfs:
-        certificates.extend(certificates_from_df(df, participants))
-
-    return participants, trainings, certificates
 
 
 # ------------------------------------------------------------------ loading

@@ -22,7 +22,6 @@ if not BOT_ICON:
     BOT_ICON = str(_icons[0]) if _icons else ""
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
-COURSE_REGISTRATION_LINK = os.getenv("COURSE_REGISTRATION_LINK", "https://forms.gle/dummy_link")
 
 # Comma-separated Telegram user IDs that are allowed to use admin commands.
 # e.g. ADMIN_IDS=123456789,987654321
@@ -41,26 +40,6 @@ TELEGRAM_PROXY = os.getenv("TELEGRAM_PROXY", "").strip()
 TELEGRAM_API_BASE_URL = os.getenv("TELEGRAM_API_BASE_URL", "").strip()
 TELEGRAM_READ_TIMEOUT = float(os.getenv("TELEGRAM_READ_TIMEOUT", "30"))
 TELEGRAM_CONNECT_TIMEOUT = float(os.getenv("TELEGRAM_CONNECT_TIMEOUT", "30"))
-
-# Google Sheets data source (optional). If GOOGLE_SHEET_ID is set, the bot
-# reads the Google Form response sheet live through Google's data API - no
-# download, no API key. The sheet must be shared with
-# "Anyone with the link -> Viewer". If the pickup form lives in a separate
-# spreadsheet, set GS_ID_C as well.
-GS_ID_R = os.getenv("GS_ID_R", "").strip()
-GS_ID_C = os.getenv("GS_ID_C", "").strip()
-GOOGLE_SHEET_REFRESH_MINUTES = int(
-    os.getenv("GOOGLE_SHEET_REFRESH_MINUTES", "5")
-)
-GOOGLE_SHEET_SHEET_NAMES = [
-    name.strip()
-    for name in os.getenv(
-        "GOOGLE_SHEET_SHEET_NAMES",
-        "Form Responses 1,Form Responses 2,Form Responses 3,Sheet1,Sheet2",
-    ).split(",")
-    if name.strip()
-]
-
 
 
 def validate() -> None:
