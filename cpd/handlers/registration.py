@@ -446,9 +446,13 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 pass
     except Exception as exc:
         logger.error("Receipt download/OCR failed for chat %s: %s", chat_id, exc)
+        import traceback
+        exc_str = str(exc)
+        if not exc_str:
+            exc_str = type(exc).__name__
         await safe_reply_html(
             update,
-            "⚠️ មិនអាចអានវិកាយបត្របានទេ។ "
+            f"⚠️ មិនអាចអានវិកាយបត្របានទេ។\n\n<b>Technical Error:</b> <code>{exc_str}</code>\n\n"
             "សូមផ្ញើរូបភាពច្បាស់ដាងនេះ ឬទាកទងអ្នករៀបចំ។",
         )
         return REG_RECEIPT
