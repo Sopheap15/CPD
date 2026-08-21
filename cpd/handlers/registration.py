@@ -427,9 +427,14 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         file = await context.bot.get_file(file_id)
 
-        # Download to a temp file
-        with tempfile.NamedTemporaryFile(suffix=".jpg", delete=False) as tmp:
-            tmp_path = tmp.name
+        import uuid
+        from pathlib import Path
+        
+        # Avoid tempfile module on Windows due to permission/lock issues
+        tmp_dir = Path("data/tmp")
+        tmp_dir.mkdir(parents=True, exist_ok=True)
+        tmp_path = str(tmp_dir / f"{uuid.uuid4()}.jpg")
+        
         try:
             await file.download_to_drive(tmp_path)
             
