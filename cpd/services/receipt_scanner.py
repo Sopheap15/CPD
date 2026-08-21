@@ -19,6 +19,12 @@ import pytesseract
 
 logger = logging.getLogger(__name__)
 
+# Configure Tesseract path for Windows users
+if os.name == "nt":
+    tess_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if os.path.exists(tess_path):
+        pytesseract.pytesseract.tesseract_cmd = tess_path
+
 ABA_MERCHANT_NAME = os.environ.get("ABA_MERCHANT_NAME", "").strip()
 ABA_ACCOUNT_NUMBER = os.environ.get("ABA_ACCOUNT_NUMBER", "002370133").strip()
 
@@ -114,18 +120,17 @@ def verify_receipt(
     upon success to prevent future replay attacks.
     """
     try:
-        img = Image.open(image_path)
-
-        text = pytesseract.image_to_string(img)
-        if len(text.strip()) < 20:
-            import cv2
-            import numpy as np
-            img_np = np.array(img.convert("RGB"))
-            gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-            _, thresh = cv2.threshold(
-                gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-            )
-            text = pytesseract.image_to_string(Image.fromarray(thresh))
+        with Image.open(image_path) as img:
+            text = pytesseract.image_to_string(img)
+            if len(text.strip()) < 20:
+                import cv2
+                import numpy as np
+                img_np = np.array(img.convert("RGB"))
+                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
+                _, thresh = cv2.threshold(
+                    gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
+                )
+                text = pytesseract.image_to_string(Image.fromarray(thresh))
 
         logger.debug("OCR text: %s", text)
         text_clean = _clean(text)

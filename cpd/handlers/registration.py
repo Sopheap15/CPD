@@ -432,7 +432,13 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             tmp_path = tmp.name
         try:
             await file.download_to_drive(tmp_path)
-            ok, reason, _ = verify_receipt(tmp_path, pending.amount)
+            
+            # Run OCR in a separate thread so it doesn't block the async event loop
+            import asyncio
+            loop = asyncio.get_running_loop()
+            ok, reason, ref = await loop.run_in_executor(
+                None, verify_receipt, tmp_path, pending.amount
+            )
         finally:
             try:
                 os.unlink(tmp_path)
@@ -448,7 +454,7 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return REG_RECEIPT
 
     if ok:
-        await finalize_paid_registration(context, pending, verified=True)
+        await finalize_paid_registration(context, pending, verified=True, ref=ref)
         clear_registration_state(context)
         return START_OPTIONS
     else:

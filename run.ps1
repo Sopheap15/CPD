@@ -22,6 +22,15 @@ function Start-Bot {
         Write-Host "Stop it first with:  .\run.ps1 stop"
         exit 1
     }
+
+    $tess = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+    if (-not (Test-Path $tess)) {
+        Write-Host "WARNING: Tesseract OCR is not installed!" -ForegroundColor Yellow
+        Write-Host "Run '.\run.ps1 install' first to install it automatically, or install it manually." -ForegroundColor Yellow
+        Write-Host "The bot will start, but receipt scanning may fail." -ForegroundColor Yellow
+        Start-Sleep -Seconds 3
+    }
+
     Write-Host "Starting CPD Track bot (Ctrl-C to stop)..."
     pixi run start
 }
@@ -55,7 +64,17 @@ switch ($Command) {
     "status"                     { Status-Bot }
     "lint"                       { pixi run lint }
     "shell"                      { pixi shell }
-    "install"                    { pixi install }
+    "install"                    { 
+        pixi install 
+        $tess = "C:\Program Files\Tesseract-OCR\tesseract.exe"
+        if (-not (Test-Path $tess)) {
+            Write-Host "Tesseract-OCR not found. Installing via winget..." -ForegroundColor Cyan
+            winget install --id UB-Mannheim.TesseractOCR -e --accept-source-agreements --accept-package-agreements
+            Write-Host "Tesseract-OCR installation complete." -ForegroundColor Green
+        } else {
+            Write-Host "Tesseract-OCR is already installed." -ForegroundColor Green
+        }
+    }
     default {
         Write-Host @"
 Usage: .\run.ps1 [command]
