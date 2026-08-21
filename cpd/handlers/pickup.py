@@ -25,8 +25,18 @@ from cpd.constants import (
     START_OPTIONS,
 )
 from cpd.config import ADMIN_IDS
-from cpd.handlers.common import _cpd, safe_reply_html
+from cpd.handlers.common import _cpd, _start_keyboard, now_str, safe_reply_html
 from cpd.i18n import fmt, t
+from cpd.services.data_loader import Participant
+from cpd.services.registrations import (
+    append_pickup,
+    load_registrations,
+)
+from cpd.services.search import (
+    exact_participant,
+    find_participant_by_secret,
+    normalize_name,
+)
 
 
 def _pickup_who_keyboard() -> InlineKeyboardMarkup:
@@ -53,11 +63,6 @@ def _resolve_pickup_participant(data, query: str):
     user cannot record a pickup against a phantom person. The user may also
     type a license number / phone as an alternative search.
     """
-    from cpd.services.search import (
-        exact_participant,
-        find_participant_by_secret,
-        normalize_name,
-    )
 
     by_secret = find_participant_by_secret(data.participants, query)
     if by_secret is not None:
@@ -70,12 +75,10 @@ def _resolve_pickup_participant(data, query: str):
     norm_query = normalize_name(query)
     for t_rec in data.trainings:
         if normalize_name(t_rec.participant_name) == norm_query:
-            from cpd.services.data_loader import Participant
             return Participant(participant_id=t_rec.participant_id, name=query)
     for c_rec in data.certificates:
         if normalize_name(c_rec.participant_name) == norm_query or \
                 normalize_name(c_rec.khmer_name) == norm_query:
-            from cpd.services.data_loader import Participant
             return Participant(
                 participant_id=c_rec.participant_id,
                 name=c_rec.participant_name or query,
@@ -86,7 +89,6 @@ def _resolve_pickup_participant(data, query: str):
 
 def picked_up_course_ids(name: str) -> set[str]:
     """Course ids already collected for this trainee from pickup rows."""
-    from cpd.services.registrations import load_registrations
 
     key = (name or "").strip().lower()
     ids: set[str] = set()
@@ -109,8 +111,6 @@ def learned_course_ids(data, name: str) -> set[str]:
       * trainings/certificates whose title or date matches a known course.
     A course that nobody attended is not offered for pickup.
     """
-    from cpd.services.registrations import load_registrations
-    from cpd.services.search import normalize_name
 
     key = (name or "").strip().lower()
     ids: set[str] = set()
@@ -355,7 +355,6 @@ async def _save_pickup(
     name = context.user_data.get("pickup_name", "")
     picker = context.user_data.get("pickup_picker", "") or name
 
-    from cpd.services.registrations import append_pickup
     for course in courses:
         if course.course_id in selected:
             append_pickup(name, picker, course_id=course.course_id,
@@ -364,7 +363,6 @@ async def _save_pickup(
     picked = [c for c in courses if c.course_id in selected]
     labels = ", ".join(f"<b>{escape(c.title)}</b>" for c in picked)
 
-    from cpd.handlers.common import now_str, _start_keyboard
 
     time_str = now_str("%Y-%m-%d %H:%M")
     if picker:
@@ -403,7 +401,6 @@ async def _notify_admins(update: Update, context: ContextTypes.DEFAULT_TYPE,
     )
     text = fmt("pickup_admin_alert", name=escape(name), courses=lines,
                time=time_str, by=by, sender=sender.full_name if sender else "-")
-    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
     keyboard = InlineKeyboardMarkup([[
         InlineKeyboardButton(
             "📊 " + t("view_history"),

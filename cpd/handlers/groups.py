@@ -9,6 +9,7 @@ from telegram.ext import ContextTypes
 
 from cpd.config import ADMIN_IDS
 from cpd.i18n import fmt, t
+from cpd.services.course_groups import get_group_chat_id
 
 
 async def offer_group_join(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
@@ -20,7 +21,6 @@ async def offer_group_join(context: ContextTypes.DEFAULT_TYPE, chat_id: int,
     ``create_chat_invite_link`` when the bot is an admin of the group;
     otherwise the course's ``Link`` column (courses.xlsx) is used as a fallback.
     """
-    from cpd.services.course_groups import get_group_chat_id
 
     group_chat_id = None
     try:

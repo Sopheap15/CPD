@@ -8,13 +8,17 @@ from html import escape
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes
 
-from cpd.constants import MENU, NAME, NL
+from cpd.constants import MENU, NAME, NL, START_OPTIONS
 from cpd.services.formatter import (
     summary_sections,
 )
+from cpd.services.search import find_participant_by_secret, search_all_fields
+from cpd.services.storage import get_linked_name, link_account
 from cpd.handlers.common import (
+    _cpd,
     _is_admin,
     _resolve_for_name,
+    _start_keyboard,
     menu_keyboard,
     safe_reply_html,
 )
@@ -24,7 +28,6 @@ logger = logging.getLogger(__name__)
 
 
 async def cmd_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    from cpd.services.storage import get_linked_name
     if not _is_admin(update):
         linked_name = get_linked_name(update.effective_user.id)
         if linked_name:
@@ -41,7 +44,6 @@ async def cmd_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 async def on_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    from cpd.services.storage import get_linked_name
     if not _is_admin(update):
         linked_name = get_linked_name(update.effective_user.id)
         if linked_name:
@@ -54,8 +56,6 @@ async def on_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 async def handle_verification(update: Update, context: ContextTypes.DEFAULT_TYPE,
                               query: str) -> str:
     """Resolve a query (name, phone, ID, department, etc.) to a participant."""
-    from cpd.handlers.common import _cpd
-    from cpd.services.search import find_participant_by_secret, search_all_fields
 
     try:
         data = _cpd(context)
@@ -82,7 +82,6 @@ async def handle_verification(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if participant is not None:
         if not _is_admin(update):
-            from cpd.services.storage import link_account
             link_account(update.effective_user.id, participant.name)
             await safe_reply_html(update,
                                   fmt("account_linked", name=escape(participant.name)))
@@ -108,7 +107,6 @@ async def on_pick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     name = query.data.split("|", 1)[1]
 
     if not _is_admin(update):
-        from cpd.services.storage import link_account
         link_account(update.effective_user.id, name)
         await safe_reply_html(update, fmt("account_linked", name=escape(name)))
 
@@ -133,8 +131,6 @@ async def on_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | N
     action = query.data.split("|", 1)[1]
 
     if action == "back":
-        from cpd.constants import START_OPTIONS
-        from cpd.handlers.common import _start_keyboard
         await query.edit_message_text(
             f"<b>{t('welcome')}</b>",
             parse_mode="HTML",
@@ -146,7 +142,6 @@ async def on_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str | N
 
 async def show_summary(update: Update, context: ContextTypes.DEFAULT_TYPE,
                        name: str, edit: bool = False) -> str:
-    from cpd.handlers.common import _cpd
 
     data = _cpd(context)
     participant = _resolve_for_name(data, name)

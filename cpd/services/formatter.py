@@ -12,7 +12,8 @@ from __future__ import annotations
 import html
 from typing import Iterable
 
-from cpd.services.data_loader import Certificate, Participant, Training
+from cpd.services.data_loader import Certificate, Course, Participant, Training
+from cpd.services.search import normalize_name
 from cpd.i18n import inline, t
 
 NL = "\n"
@@ -143,7 +144,6 @@ def _cert_status_for_trainings(
     course_list = list(courses) if courses else []
 
     def _course_for(training: Training) -> Course | None:
-        from cpd.services.search import normalize_name
         t_title = normalize_name(training.title or "")
         t_date = normalize_name(training.date or "")
         for c in course_list:

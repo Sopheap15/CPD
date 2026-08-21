@@ -12,9 +12,11 @@ bot is running without restarting it.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import re
 import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -22,6 +24,7 @@ from typing import Any
 import pandas as pd
 
 from cpd.config import DATA_DIR
+from cpd.services.registrations import REGISTRATIONS_FILE, load_registrations
 
 logger = logging.getLogger(__name__)
 
@@ -315,16 +318,12 @@ class CpdData:
                 continue
             for path in sorted(root.glob("*.xlsx")):
                 mtimes[str(path)] = int(path.stat().st_mtime)
-        from cpd.services.registrations import REGISTRATIONS_FILE
         if REGISTRATIONS_FILE.exists():
             mtimes[str(REGISTRATIONS_FILE)] = int(REGISTRATIONS_FILE.stat().st_mtime)
         return mtimes
 
     def _maybe_refresh_google(self) -> bool:
         """Query Google Sheets at an interval; return True if data changed."""
-        import hashlib
-        import time
-
         from cpd.services import google_sheets
         from cpd.config import (
             GS_ID_R,
@@ -509,7 +508,6 @@ class CpdData:
 
     def _merge_registrations(self) -> None:
         """Merge in-bot course registrations into participants + trainings."""
-        from cpd.services.registrations import load_registrations
 
         by_name: dict[str, Participant] = {}
         for p in self.participants:

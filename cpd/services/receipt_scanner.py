@@ -14,10 +14,19 @@ import os
 import re
 import logging
 from pathlib import Path
+
+import cv2
+import numpy as np
 from PIL import Image
 import pytesseract
 
+from cpd.services.registrations import has_payment_ref
+
 logger = logging.getLogger(__name__)
+
+# Cap the longest side before OCR. Tesseract runtime explodes with image
+# size; anything above this adds seconds without improving accuracy.
+MAX_OCR_SIDE = 2000
 
 # Configure Tesseract path for Windows users
 if os.name == "nt":
@@ -44,7 +53,6 @@ ABA_ACCOUNT_NUMBER = os.environ.get("ABA_ACCOUNT_NUMBER", "002370133").strip()
 
 def is_duplicate_receipt(ref: str) -> bool:
     """Return True if this reference was already used for a successful payment."""
-    from cpd.services.registrations import has_payment_ref
     if not ref:
         return False
     return has_payment_ref(ref)
@@ -122,14 +130,22 @@ def _ocr_image(image_path: str) -> str:
     held open when pytesseract spawns the Tesseract subprocess — important on
     Windows where open file handles block child-process access.
     """
-    import numpy as np
-    import cv2
-
     # Read image bytes into memory first, then close the file.
     img_arr = np.frombuffer(Path(image_path).read_bytes(), dtype=np.uint8)
     bgr = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
     if bgr is None:
         raise ValueError(f"cv2 could not decode image: {image_path}")
+
+    # Downscale very large photos (e.g. full-resolution phone cameras or
+    # document scans) so OCR stays within the handler's timeout budget.
+    h, w = bgr.shape[:2]
+    if max(h, w) > MAX_OCR_SIDE:
+        scale = MAX_OCR_SIDE / max(h, w)
+        bgr = cv2.resize(
+            bgr,
+            (int(w * scale), int(h * scale)),
+            interpolation=cv2.INTER_AREA,
+        )
 
     # Try once with the raw image
     pil_img = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))

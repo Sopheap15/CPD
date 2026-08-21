@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import functools
 import logging
+import warnings
 
 from telegram import Update
 from telegram.ext import (
@@ -16,7 +17,7 @@ from telegram.ext import (
     filters,
 )
 
-from cpd.config import ADMIN_IDS
+from cpd.config import ADMIN_IDS, TELEGRAM_BOT_TOKEN, validate
 
 from cpd.constants import (
     MENU,
@@ -74,13 +75,14 @@ from cpd.handlers.registration import (
     on_reg_phone,
 )
 from cpd.handlers.start import cmd_start, on_start_option
+from cpd.handlers.common import safe_reply_html
+from cpd.i18n import fmt, t
+from cpd.services.storage import get_linked_name, unlink_account
 
 logger = logging.getLogger(__name__)
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
-    from cpd.handlers.common import safe_reply_html
-    from cpd.i18n import t
     context.user_data.pop("name", None)
     await safe_reply_html(update, t("cancel"))
     return ConversationHandler.END
@@ -88,8 +90,6 @@ async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
 
 async def cmd_myid(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Show the user their own Telegram ID."""
-    from cpd.handlers.common import safe_reply_html
-    from cpd.i18n import fmt
     await safe_reply_html(update, fmt("your_telegram_id", tid=update.effective_user.id))
 
 
@@ -99,9 +99,6 @@ def _admin_gate(handler):
     Regular users get the "admin only" notice; /start and /cancel stay
     available to everyone.
     """
-    from cpd.handlers.common import safe_reply_html
-    from cpd.i18n import t
-
     @functools.wraps(handler)
     async def wrapped(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = update.effective_user
@@ -115,9 +112,6 @@ def _admin_gate(handler):
 
 async def cmd_unlink(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Unlink the current Telegram account from its participant record."""
-    from cpd.handlers.common import safe_reply_html
-    from cpd.i18n import t
-    from cpd.services.storage import get_linked_name, unlink_account
     name = get_linked_name(update.effective_user.id)
     if not name:
         await safe_reply_html(update, t("not_linked"))
@@ -303,14 +297,10 @@ async def _error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> 
 
 
 def main() -> None:
-    import warnings
-
     warnings.filterwarnings(
         "ignore",
         message="If 'per_message=False'.*",
     )
-
-    from cpd.config import TELEGRAM_BOT_TOKEN, validate
 
     validate()
 

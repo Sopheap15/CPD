@@ -7,6 +7,7 @@ import logging
 import os
 import traceback
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from html import escape
 
@@ -37,13 +38,34 @@ from cpd.handlers.common import (
 )
 from cpd.handlers.groups import offer_group_join
 from cpd.i18n import fmt, t
+from cpd.services.data_loader import Course, Participant
+from cpd.services.payments import (
+    create_payment,
+    drop_payment,
+    get_pending,
+    payment_expired,
+)
+from cpd.services.receipt_scanner import verify_receipt
 from cpd.services.registrations import (
     append_registration,
     generate_payment_ref,
     has_duplicate,
+    load_registrations,
     registration_by_name,
 )
+from cpd.services.search import (
+    exact_participant,
+    find_best,
+    find_participant_by_secret,
+)
 from cpd.services.storage import get_linked_name, link_account
+
+# OCR runs off the event loop in a small dedicated pool. A hard timeout
+# guarantees the user always gets an answer even if Tesseract hangs on a
+# huge or corrupt image (otherwise the whole bot would freeze, because
+# python-telegram-bot processes updates sequentially).
+OCR_TIMEOUT_SECONDS = 60.0
+_ocr_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ocr")
 
 
 def _course_buttons(courses) -> InlineKeyboardMarkup:
@@ -103,7 +125,6 @@ async def resolve_known_participant(update: Update, context: ContextTypes.DEFAUL
     Checks (in order): Telegram-linked account, then any previous in-bot
     registration. This lets returning users skip all questions.
     """
-    from cpd.services.search import exact_participant
 
     data = _cpd(context)
     linked_name = get_linked_name(update.effective_user.id)
@@ -113,7 +134,6 @@ async def resolve_known_participant(update: Update, context: ContextTypes.DEFAUL
         if participant is not None and (participant.participant_id or participant.phone):
             return participant
 
-    from cpd.services.data_loader import Participant
     prior = _latest_registration_for_user(update.effective_user.id)
     if prior is not None:
         return Participant(
@@ -127,7 +147,6 @@ async def resolve_known_participant(update: Update, context: ContextTypes.DEFAUL
 
 
 def _latest_registration_for_user(telegram_id: int) -> dict | None:
-    from cpd.services.registrations import load_registrations
     rows = [r for r in load_registrations()
             if str(r.get("telegram_id", "")).strip() == str(telegram_id).strip()
             and r.get("name")]
@@ -206,12 +225,6 @@ async def _ask_next_missing(update: Update,
 
 async def on_reg_identity(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """User typed a license number or full name to identify themselves."""
-    from cpd.services.data_loader import Participant
-    from cpd.services.search import (
-        exact_participant,
-        find_best,
-        find_participant_by_secret,
-    )
 
     text = (update.effective_message.text or "").strip()
     if not text:
@@ -261,7 +274,6 @@ async def on_reg_license(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # If this license already exists in the records, reuse that person's
     # name/phone so they don't have to re-enter anything.
-    from cpd.services.search import find_participant_by_secret
     data = _cpd(context)
     known = find_participant_by_secret(data.participants, license_val)
     if known is not None:
@@ -320,7 +332,6 @@ async def on_reg_location(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return REG_LOCATION
     context.user_data["reg_location"] = location
 
-    from cpd.services.data_loader import Participant
     participant = Participant(
         participant_id=context.user_data.get("reg_license", ""),
         name=context.user_data.get("reg_name", ""),
@@ -373,7 +384,6 @@ async def start_payment(update: Update, context: ContextTypes.DEFAULT_TYPE,
     registers the participant directly when no payment is required / not
     configured.
     """
-    from cpd.services.payments import create_payment
 
     chat_id = update.effective_chat.id
     pending = create_payment(
@@ -430,7 +440,6 @@ async def start_payment(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 async def on_pay_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Callback 'pay|check': ask the user to upload their ABA receipt for verification."""
-    from cpd.services.payments import get_pending, payment_expired, drop_payment
 
     query = update.callback_query
     if query is None:
@@ -458,8 +467,6 @@ async def on_pay_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
 
 async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Handle the uploaded receipt photo and verify it with local OCR."""
-    from cpd.services.payments import get_pending, drop_payment, payment_expired
-    from cpd.services.receipt_scanner import verify_receipt
 
     logger = logging.getLogger(__name__)
     chat_id = update.effective_chat.id
@@ -529,11 +536,23 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             Path(tmp_path).write_bytes(img_bytes)
             del img_bytes  # free memory before spawning OCR thread
 
-            # Run OCR in a separate thread so it doesn't block the async event loop
+            # Run OCR off the event loop with a hard timeout so a slow or
+            # hung Tesseract run can never freeze the bot or leave the
+            # user waiting forever after "កំពុងពិនិត្យ...".
             loop = asyncio.get_running_loop()
-            ok, reason, ref = await loop.run_in_executor(
-                None, verify_receipt, tmp_path, pending.amount
+            ok, reason, ref = await asyncio.wait_for(
+                loop.run_in_executor(_ocr_pool, verify_receipt, tmp_path, pending.amount),
+                timeout=OCR_TIMEOUT_SECONDS,
             )
+        except TimeoutError:
+            logger.error("Receipt OCR timed out for chat %s", chat_id)
+            await safe_reply_html(
+                update,
+                "⚠️ ការពិនិត្យវិកាយបត្រយូរពេក។\n\n"
+                "សូមផ្ញើរូបភាពវិកាយបត្រតូចជាង/ច្បាស់ជាងនេះម្តងទៀត "
+                "(ឧ. ស្គ្រីនសូតដោយផ្ទាល់ ជាជាងរូបថត)។",
+            )
+            return REG_RECEIPT
         finally:
             try:
                 os.unlink(tmp_path)
@@ -576,7 +595,6 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 async def on_pay_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Callback 'pay|cancel': drop the pending payment and the registration."""
-    from cpd.services.payments import drop_payment
 
     query = update.callback_query
     if query is None:
@@ -647,8 +665,6 @@ async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
     ``ref`` is the receipt reference extracted by OCR; recording it prevents
     the same receipt from being used again (anti-replay).
     """
-    from cpd.services.data_loader import Course, Participant
-    from cpd.services.payments import drop_payment
 
     p = pending.user_data.get("participant", {})
     c = pending.user_data.get("course", {})

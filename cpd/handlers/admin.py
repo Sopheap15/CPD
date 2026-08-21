@@ -8,7 +8,27 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
 from cpd.handlers.common import _cpd, _is_admin, safe_reply_html
+from cpd.handlers.history import show_summary
+from cpd.handlers.registration import open_courses
 from cpd.i18n import fmt, t
+from cpd.services.course_groups import (
+    all_group_mappings,
+    clear_group_chat_id,
+    get_group_chat_id,
+    set_group_chat_id,
+)
+from cpd.services.registrations import (
+    clear_registrations,
+    delete_registration,
+    load_registrations,
+    mark_paid,
+)
+from cpd.services.storage import (
+    admin_unlink_by_name,
+    link_account,
+    list_all_links,
+    unlink_account,
+)
 
 
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -24,7 +44,6 @@ async def cmd_admin_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not _is_admin(update):
         await safe_reply_html(update, t("admin_only"))
         return
-    from cpd.services.storage import list_all_links
     links = list_all_links()
     if not links:
         await safe_reply_html(update, "No accounts linked yet.")
@@ -48,7 +67,6 @@ async def cmd_admin_link(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     tid = int(args[0])
     name = " ".join(args[1:])
-    from cpd.services.storage import link_account
     link_account(tid, name)
     await safe_reply_html(update,
         f"✅ Linked <code>{tid}</code> → <b>{escape(name)}</b>")
@@ -66,7 +84,6 @@ async def cmd_admin_unlink(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "Example: /admin_unlink 123456789\n"
             "Example: /admin_unlink KY Kimhuy")
         return
-    from cpd.services.storage import admin_unlink_by_name, unlink_account
     query = " ".join(args)
     if query.isdigit():
         unlink_account(int(query))
@@ -91,7 +108,6 @@ async def cmd_admin_view(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "Usage: /admin_view &lt;Full Name&gt;\n"
             "Example: /admin_view KY Kimhuy")
         return ConversationHandler.END
-    from cpd.handlers.history import show_summary
     return await show_summary(update, context, " ".join(args))
 
 
@@ -112,7 +128,6 @@ async def auto_link_group(update: Update, context: ContextTypes.DEFAULT_TYPE,
         await safe_reply_html(update,
                               fmt("admin_group_unknown_course", course_id=escape(course_id)))
         return ConversationHandler.END
-    from cpd.services.course_groups import set_group_chat_id
     set_group_chat_id(course_id, chat.id)
     # Rename the group to "Date - Title" so participants see the right name.
     title = f"{course.date} - {course.title}" if course.date else course.title
@@ -154,7 +169,6 @@ async def cmd_admin_group(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await safe_reply_html(update,
                               fmt("admin_group_unknown_course", course_id=escape(course_id)))
         return
-    from cpd.services.course_groups import set_group_chat_id
     set_group_chat_id(course_id, chat.id)
     await safe_reply_html(update,
                           fmt("admin_group_ok", course=escape(course.title),
@@ -179,12 +193,10 @@ async def cmd_admin_setup(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         await safe_reply_html(update, t("admin_group_make_admin"))
         return
     data = _cpd(context)
-    from cpd.handlers.registration import open_courses
     courses = open_courses(data)
     if not courses:
         await safe_reply_html(update, "No open courses to set up.")
         return
-    from cpd.services.course_groups import get_group_chat_id
     lines = ["<b>🛠 Setup course groups</b>\n"
              "Tap a button, choose the course's group (or create one in "
              "Telegram first), and the bot will link + rename it automatically "
@@ -219,7 +231,6 @@ async def cmd_admin_group_clear(update: Update, context: ContextTypes.DEFAULT_TY
             "Example: /admin_group_clear C002")
         return
     course_id = args[0].strip()
-    from cpd.services.course_groups import clear_group_chat_id
     clear_group_chat_id(course_id)
     await safe_reply_html(update, f"✅ Unlinked group for course <b>{escape(course_id)}</b>")
 
@@ -229,7 +240,6 @@ async def cmd_admin_regs(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not _is_admin(update):
         await safe_reply_html(update, t("admin_only"))
         return
-    from cpd.services.registrations import load_registrations
     rows = load_registrations()
     if not rows:
         await safe_reply_html(update, "No registrations yet.")
@@ -256,7 +266,6 @@ async def cmd_admin_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             "Get the bill number from /admin_regs.")
         return
     bill = args[0].strip()
-    from cpd.services.registrations import mark_paid
     if mark_paid(bill, status="Paid"):
         await safe_reply_html(update,
             f"✅ Payment <code>{escape(bill)}</code> marked as <b>Paid</b>.")
@@ -270,7 +279,6 @@ async def cmd_admin_groups(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     if not _is_admin(update):
         await safe_reply_html(update, t("admin_only"))
         return
-    from cpd.services.course_groups import all_group_mappings
     mapping = all_group_mappings()
     if not mapping:
         await safe_reply_html(update, "No course groups linked yet. Use /admin_setup.")
@@ -300,7 +308,6 @@ async def cmd_admin_group_rename(update: Update, context: ContextTypes.DEFAULT_T
         return
     course_id = args[0].strip()
     title = " ".join(args[1:]).strip()
-    from cpd.services.course_groups import get_group_chat_id
     chat_id = get_group_chat_id(course_id)
     if chat_id is None:
         await safe_reply_html(update, fmt("admin_kick_nogroup", course=escape(course_id)))
@@ -325,7 +332,6 @@ async def cmd_admin_reg_del(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     tid = args[0].strip()
     course_id = args[1].strip()
-    from cpd.services.registrations import delete_registration
     if delete_registration(tid, course_id):
         await safe_reply_html(update,
             fmt("admin_reg_del_ok", tid=escape(tid), course=escape(course_id)))
@@ -342,7 +348,6 @@ async def cmd_admin_reg_clear(update: Update, context: ContextTypes.DEFAULT_TYPE
     if not (context.args and context.args[0].strip().lower() == "yes"):
         await safe_reply_html(update, t("admin_reg_clear_usage"))
         return
-    from cpd.services.registrations import clear_registrations
     count = clear_registrations()
     await safe_reply_html(update, fmt("admin_reg_clear_ok", count=count))
 
@@ -365,7 +370,6 @@ async def cmd_admin_kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if not tid.lstrip("-").isdigit():
         await safe_reply_html(update, t("admin_kick_usage"))
         return
-    from cpd.services.course_groups import get_group_chat_id
     chat_id = get_group_chat_id(course_id)
     if chat_id is None:
         await safe_reply_html(update, fmt("admin_kick_nogroup", course=escape(course_id)))

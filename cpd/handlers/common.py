@@ -12,7 +12,8 @@ from telegram.ext import ContextTypes
 from cpd.config import ADMIN_IDS, BOT_ICON
 from cpd.constants import NL
 from cpd.i18n import fmt, t
-from cpd.services.data_loader import CpdData
+from cpd.services.data_loader import CpdData, Participant
+from cpd.services.search import exact_participant, normalize_name
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +112,6 @@ def clear_registration_state(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 def _resolve_for_name(data: CpdData, name: str):
     """Exact participant, else a minimal trainings/certificates-only record."""
-    from cpd.services.search import exact_participant
     participant = exact_participant(data.participants, name)
     if participant is not None:
         return participant
@@ -124,8 +124,6 @@ def _name_only_participant(data: CpdData, name: str):
     This keeps the bot working when a participant only appears in the
     trainings/certificates files but not in participants.xlsx.
     """
-    from cpd.services.data_loader import Participant
-    from cpd.services.search import normalize_name
 
     norm_query = normalize_name(name)
 
