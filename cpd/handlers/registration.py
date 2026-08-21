@@ -49,10 +49,10 @@ def _course_buttons(courses) -> InlineKeyboardMarkup:
     """Inline buttons for every open course."""
     rows = [
         [InlineKeyboardButton(
-            f"{c.title} — {c.date}" if c.date else c.title,
+            f"{idx}. {c.title} — {c.date}" if c.date else f"{idx}. {c.title}",
             callback_data=f"reg|{c.course_id}",
         )]
-        for c in courses
+        for idx, c in enumerate(courses, start=1)
     ]
     rows.append([InlineKeyboardButton("⬅️ ត្រឡប់ក្រោយ (Back)",
                                       callback_data="start|back")])
@@ -68,16 +68,19 @@ def open_courses(data) -> list:
 
 def _course_list_text(data) -> str:
     """The 'Choose a course' listing with date, points and fee."""
-    text = "<b>📚 សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាល (Choose a course):</b>\n\n"
-    for c in open_courses(data):
-        text += f"• <b>{escape(c.title)}</b>\n"
+    blocks = []
+    for idx, c in enumerate(open_courses(data), start=1):
+        block = f"<b>{idx}.</b> <b>{escape(c.title)}</b>"
         if c.date:
-            text += f"  🗓️ កាលបរិច្ឆេទ (Date): {escape(c.date)}\n"
+            block += f"\n  🗓️ កាលបរិច្ឆេទ (Date): {escape(c.date)}"
         if c.cpd_points:
-            text += f"  ⭐ ពិន្ទុ CPD (CPD Points): {escape(c.cpd_points)}\n"
+            block += f"\n  ⭐ ពិន្ទុ CPD (CPD Points): {escape(c.cpd_points)}"
         if c.fee:
             fee = f"{c.fee:.2f}".rstrip("0").rstrip(".")
-            text += f"  💵 ថ្លៃ (Fee): ${fee}\n"
+            block += f"\n  💵 ថ្លៃ (Fee): ${fee}"
+        blocks.append(block)
+    text = "<b>📚 សូមជ្រើសរើសវគ្គបណ្តុះបណ្តាល (Choose a course):</b>\n\n"
+    text += "\n\n".join(blocks)
     text += "\n\n" + t("further_info")
     return text
 

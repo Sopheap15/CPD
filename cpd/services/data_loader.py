@@ -179,6 +179,26 @@ def _parse_fee(value: Any) -> float:
         return 0.0
 
 
+def _format_course_date(value: Any) -> str:
+    """Format a course date as ``YYYY-MM-DD`` or ``YYYY-MM-DD HH:MM``.
+
+    The time part is shown only when the Excel cell actually carries one
+    (e.g. ``2026-07-25 14:00``); midnight times are hidden.
+    """
+    s = _norm(value)
+    if not s:
+        return ""
+    try:
+        ts = pd.to_datetime(s)
+    except (ValueError, TypeError):
+        return s
+    if pd.isna(ts):
+        return s
+    if ts.hour or ts.minute:
+        return ts.strftime("%Y-%m-%d %H:%M")
+    return ts.strftime("%Y-%m-%d")
+
+
 def _read_sheet(path: Path, column_map: dict[str, str]) -> pd.DataFrame:
     df = pd.read_excel(path, sheet_name=0)
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
@@ -386,7 +406,7 @@ class CpdData:
                         Course(
                             course_id=_norm(row.get("course_id", "")),
                             title=_norm(row.get("title", "")),
-                            date=_norm(row.get("date", "")),
+                            date=_format_course_date(row.get("date", "")),
                             cpd_points=_norm(row.get("cpd_points", "")),
                             link=_norm(row.get("link", "")),
                             status=_norm(row.get("status", "")),
