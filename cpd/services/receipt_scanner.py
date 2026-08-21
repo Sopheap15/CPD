@@ -21,9 +21,23 @@ logger = logging.getLogger(__name__)
 
 # Configure Tesseract path for Windows users
 if os.name == "nt":
-    tess_path = r"C:\Program Files\Tesseract-OCR\tesseract.exe"
-    if os.path.exists(tess_path):
-        pytesseract.pytesseract.tesseract_cmd = tess_path
+    # Try common Windows install paths
+    _tess_candidates = [
+        r"C:\Program Files\Tesseract-OCR\tesseract.exe",
+        r"C:\Program Files (x86)\Tesseract-OCR\tesseract.exe",
+        r"C:\Users\osopheap\AppData\Local\Programs\Tesseract-OCR\tesseract.exe",
+    ]
+    for _p in _tess_candidates:
+        if os.path.exists(_p):
+            pytesseract.pytesseract.tesseract_cmd = _p
+            logger.info("Tesseract found at: %s", _p)
+            break
+    else:
+        logger.warning(
+            "Tesseract-OCR not found in common locations on Windows. "
+            "Install it from https://github.com/UB-Mannheim/tesseract/wiki "
+            "or run: .\\run.ps1 install"
+        )
 
 ABA_MERCHANT_NAME = os.environ.get("ABA_MERCHANT_NAME", "").strip()
 ABA_ACCOUNT_NUMBER = os.environ.get("ABA_ACCOUNT_NUMBER", "002370133").strip()
@@ -101,6 +115,35 @@ def _extract_amounts(text: str) -> set[float]:
     return amounts
 
 
+def _ocr_image(image_path: str) -> str:
+    """Run Tesseract OCR on an image file, with OpenCV pre-processing fallback.
+
+    Always operates on a *copy* of the pixel data so the file handle is never
+    held open when pytesseract spawns the Tesseract subprocess — important on
+    Windows where open file handles block child-process access.
+    """
+    import numpy as np
+    import cv2
+
+    # Read image bytes into memory first, then close the file.
+    img_arr = np.frombuffer(Path(image_path).read_bytes(), dtype=np.uint8)
+    bgr = cv2.imdecode(img_arr, cv2.IMREAD_COLOR)
+    if bgr is None:
+        raise ValueError(f"cv2 could not decode image: {image_path}")
+
+    # Try once with the raw image
+    pil_img = Image.fromarray(cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB))
+    text = pytesseract.image_to_string(pil_img)
+
+    # If OCR yield is too low, pre-process with grayscale + Otsu threshold
+    if len(text.strip()) < 20:
+        gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+        _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        text = pytesseract.image_to_string(Image.fromarray(thresh))
+
+    return text
+
+
 # ── Main verification ──────────────────────────────────────────────────────────
 
 def verify_receipt(
@@ -116,80 +159,66 @@ def verify_receipt(
     Returns:
       (success: bool, message_in_khmer: str, ref_number: str | None)
 
-    The handler must record the registration in the CSV using the returned reference 
+    The handler must record the registration in the CSV using the returned reference
     upon success to prevent future replay attacks.
     """
     try:
-        with Image.open(image_path) as img:
-            text = pytesseract.image_to_string(img)
-            if len(text.strip()) < 20:
-                import cv2
-                import numpy as np
-                img_np = np.array(img.convert("RGB"))
-                gray = cv2.cvtColor(img_np, cv2.COLOR_RGB2GRAY)
-                _, thresh = cv2.threshold(
-                    gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU
-                )
-                text = pytesseract.image_to_string(Image.fromarray(thresh))
-
-        logger.debug("OCR text: %s", text)
-        text_clean = _clean(text)
-
-        # ── Extract reference number ───────────────────────────────────────
-        ref = _extract_reference(text)
-        logger.debug("Receipt reference extracted: %s", ref)
-
-        # ── Duplicate check ────────────────────────────────────────────────
-        if ref and is_duplicate_receipt(ref):
-            return (
-                False,
-                f"❌ វិកាយបត្រនេះធ្លាប់ត្រូវបានប្រើរួចហើយ (Ref: {ref})។ "
-                "សូមផ្ញើវិកាយបត្រផ្សេង ឬទាក់ទងអ្នករៀបចំ។",
-                ref,
-            )
-
-        # ── Recipient check ────────────────────────────────────────────────
-        recipient_ok = False
-        if ABA_MERCHANT_NAME:
-            words = [w for w in ABA_MERCHANT_NAME.upper().split() if len(w) > 1]
-            recipient_ok = all(_clean(w) in text_clean for w in words)
-
-        if not recipient_ok:
-            acc = re.sub(r"\D", "", ABA_ACCOUNT_NUMBER)
-            acc_pattern = "".join(
-                f"(?:{d}|{'o' if d == '0' else 'l' if d == '1' else 'z' if d == '2' else d})"
-                for d in acc
-            )
-            recipient_ok = bool(re.search(acc_pattern, text_clean))
-
-        if not recipient_ok:
-            dest = ABA_MERCHANT_NAME or ABA_ACCOUNT_NUMBER
-            return (
-                False,
-                f"❌ គណនីទទួលប្រាក់មិនត្រឹមត្រូវ។ "
-                f"សូមបង់ទៅ {dest} ហើយបញ្ចូលវិកាយបត្រនោះ។",
-                ref,
-            )
-
-        # ── Amount check ───────────────────────────────────────────────────
-        found_amounts = _extract_amounts(text)
-        logger.debug("Amounts on receipt: %s  expected: %.2f", found_amounts, expected_amount)
-
-        if round(expected_amount, 2) not in found_amounts:
-            return (
-                False,
-                f"❌ ចំនួនទឹកប្រាក់មិនត្រូវគ្នា។ "
-                f"រកមិនឃើញ ${expected_amount:.2f} នៅក្នុងវិកាយបត្រ។",
-                ref,
-            )
-
-        return True, "✅ ការបង់ប្រាក់បានផ្ទៀងផ្ទាត់ដោយជោគជ័យ!", ref
-
+        text = _ocr_image(image_path)
     except Exception as exc:
-        logger.error("Receipt verification error: %s", exc, exc_info=True)
+        # Surface the real error (e.g. TesseractNotFoundError) so the caller
+        # can display it to the admin instead of a vague "clearer photo" msg.
+        logger.error("OCR failed: %s", exc, exc_info=True)
+        raise
+
+    logger.debug("OCR raw text:\n%s", text)
+    text_clean = _clean(text)
+
+    # ── Extract reference number ───────────────────────────────────────
+    ref = _extract_reference(text)
+    logger.debug("Receipt reference extracted: %s", ref)
+
+    # ── Duplicate check ────────────────────────────────────────────────
+    if ref and is_duplicate_receipt(ref):
         return (
             False,
-            "⚠️ មិនអាចអានវិកាយបត្របានទេ។ "
-            "សូមផ្ញើរូបភាពច្បាស់ជាងនេះ ឬទាក់ទងអ្នករៀបចំ។",
-            None,
+            f"❌ វិកាយបត្រនេះធ្លាប់ត្រូវបានប្រើរួចហើយ (Ref: {ref})។ "
+            "សូមផ្ញើវិកាយបត្រផ្សេង ឬទាក់ទងអ្នករៀបចំ។",
+            ref,
         )
+
+    # ── Recipient check ────────────────────────────────────────────────
+    recipient_ok = False
+    if ABA_MERCHANT_NAME:
+        words = [w for w in ABA_MERCHANT_NAME.upper().split() if len(w) > 1]
+        recipient_ok = all(_clean(w) in text_clean for w in words)
+
+    if not recipient_ok:
+        acc = re.sub(r"\D", "", ABA_ACCOUNT_NUMBER)
+        acc_pattern = "".join(
+            f"(?:{d}|{'o' if d == '0' else 'l' if d == '1' else 'z' if d == '2' else d})"
+            for d in acc
+        )
+        recipient_ok = bool(re.search(acc_pattern, text_clean))
+
+    if not recipient_ok:
+        dest = ABA_MERCHANT_NAME or ABA_ACCOUNT_NUMBER
+        return (
+            False,
+            f"❌ គណនីទទួលប្រាក់មិនត្រឹមត្រូវ។ "
+            f"សូមបង់ទៅ {dest} ហើយបញ្ចូលវិកាយបត្រនោះ។",
+            ref,
+        )
+
+    # ── Amount check ───────────────────────────────────────────────────
+    found_amounts = _extract_amounts(text)
+    logger.debug("Amounts on receipt: %s  expected: %.2f", found_amounts, expected_amount)
+
+    if round(expected_amount, 2) not in found_amounts:
+        return (
+            False,
+            f"❌ ចំនួនទឹកប្រាក់មិនត្រូវគ្នា។ "
+            f"រកមិនឃើញ ${expected_amount:.2f} នៅក្នុងវិកាយបត្រ។",
+            ref,
+        )
+
+    return True, "✅ ការបង់ប្រាក់បានផ្ទៀងផ្ទាត់ដោយជោគជ័យ!", ref
