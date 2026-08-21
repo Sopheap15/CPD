@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -66,6 +67,30 @@ from cpd.services.storage import get_linked_name, link_account
 # python-telegram-bot processes updates sequentially).
 OCR_TIMEOUT_SECONDS = 60.0
 _ocr_pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ocr")
+
+# Verified receipts are archived here for bookkeeping: <name>_<course>.jpg
+RECEIPTS_DIR = Path("data/receipts")
+
+
+def _archive_receipt(tmp_path: str, pending) -> None:
+    """Move a just-verified receipt image into data/receipts/.
+
+    The file is named after the customer and the course so staff can find it:
+    ``Sokha_Chan_C002.jpg``. Khmer characters are kept; path-unsafe characters
+    are replaced with underscores. If a file with that name already exists,
+    the bill number is appended to keep both.
+    """
+    p = pending.user_data.get("participant", {})
+    name = (p.get("name") or "").strip() or "customer"
+    stem = re.sub(r"[^\w\-]+", "_", f"{name}_{pending.course_id}", flags=re.UNICODE).strip("_")
+    dest = RECEIPTS_DIR / f"{stem}.jpg"
+    if dest.exists():
+        dest = RECEIPTS_DIR / f"{stem}_{pending.bill_number}.jpg"
+    try:
+        Path(tmp_path).replace(dest)
+    except OSError as exc:
+        logging.getLogger(__name__).warning(
+            "Could not archive receipt for chat %s: %s", pending.chat_id, exc)
 
 
 def _course_buttons(courses) -> InlineKeyboardMarkup:
@@ -544,6 +569,10 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 loop.run_in_executor(_ocr_pool, verify_receipt, tmp_path, pending.amount),
                 timeout=OCR_TIMEOUT_SECONDS,
             )
+            if ok:
+                # Keep the verified proof of payment (moves the temp file,
+                # so the cleanup below becomes a no-op).
+                _archive_receipt(tmp_path, pending)
         except TimeoutError:
             logger.error("Receipt OCR timed out for chat %s", chat_id)
             await safe_reply_html(

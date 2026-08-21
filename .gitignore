@@ -12,6 +12,7 @@ data/cpd.err
 data/cpd.out
 data/cpd.watchdog.log
 data/in_bot_registrations.csv
+data/receipts/
 data/telegram_links.json
 data/used_receipts.json
 ~$*.xlsx
