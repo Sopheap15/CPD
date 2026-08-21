@@ -82,6 +82,7 @@ class Course:
     course_id: str = ""
     title: str = ""
     date: str = ""
+    time: str = ""
     cpd_points: str = ""
     link: str = ""
     status: str = ""
@@ -407,6 +408,7 @@ class CpdData:
                             course_id=_norm(row.get("course_id", "")),
                             title=_norm(row.get("title", "")),
                             date=_format_course_date(row.get("date", "")),
+                            time=_norm(row.get("time", "")),
                             cpd_points=_norm(row.get("cpd_points", "")),
                             link=_norm(row.get("link", "")),
                             status=_norm(row.get("status", "")),

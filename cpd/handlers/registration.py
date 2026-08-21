@@ -73,6 +73,8 @@ def _course_list_text(data) -> str:
         block = f"<b>{idx}.</b> <b>{escape(c.title)}</b>"
         if c.date:
             block += f"\n  🗓️ កាលបរិច្ឆេទ (Date): {escape(c.date)}"
+        if c.time:
+            block += f"\n  ⏰ ម៉ោង (Time): {escape(c.time)}"
         if c.cpd_points:
             block += f"\n  ⭐ ពិន្ទុ CPD (CPD Points): {escape(c.cpd_points)}"
         if c.fee:
