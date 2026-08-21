@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import asyncio
+import logging
+import os
+import traceback
+import uuid
+from pathlib import Path
 from html import escape
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
@@ -356,7 +362,6 @@ async def start_payment(update: Update, context: ContextTypes.DEFAULT_TYPE,
                 reply_markup=pay_kb,
             )
     except Exception as e:
-        import logging
         logging.getLogger(__name__).error(f"send_photo failed: {e}", exc_info=True)
         await safe_reply_html(update, caption, reply_markup=pay_kb)
     return REG_PAYMENT
@@ -392,9 +397,6 @@ async def on_pay_check(update: Update, context: ContextTypes.DEFAULT_TYPE) -> st
 
 async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
     """Handle the uploaded receipt photo and verify it with local OCR."""
-    import os
-    import tempfile
-    import logging
     from cpd.services.payments import get_pending, drop_payment, payment_expired
     from cpd.services.receipt_scanner import verify_receipt
 
@@ -427,9 +429,6 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     try:
         file = await context.bot.get_file(file_id)
 
-        import uuid
-        from pathlib import Path
-        
         # Avoid tempfile module on Windows due to permission/lock issues
         tmp_dir = Path("data/tmp")
         tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -439,7 +438,6 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             await file.download_to_drive(tmp_path)
             
             # Run OCR in a separate thread so it doesn't block the async event loop
-            import asyncio
             loop = asyncio.get_running_loop()
             ok, reason, ref = await loop.run_in_executor(
                 None, verify_receipt, tmp_path, pending.amount
@@ -451,7 +449,6 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
                 pass
     except Exception as exc:
         logger.error("Receipt download/OCR failed for chat %s: %s", chat_id, exc)
-        import traceback
         exc_str = str(exc)
         if not exc_str:
             exc_str = type(exc).__name__
