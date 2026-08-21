@@ -426,15 +426,40 @@ async def on_receipt_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await safe_reply_html(update, "🔍 កំពុងពិនិត្យវិកាយបត្ររបស់អ្នក...")
 
     # Never let the receipt step hang: catch any failure.
+    # Retry the download a few times - the Cloudflare Worker route can
+    # drop connections transiently (httpx.ConnectError).
+    img_bytes: bytes | None = None
+    last_exc: Exception | None = None
+    for attempt in range(3):
+        try:
+            file = await context.bot.get_file(file_id)
+
+            # Download via the bot's own HTTP client so it respects the
+            # Cloudflare/proxy configuration set in TELEGRAM_API_BASE_URL.
+            img_bytes = bytes(await file.download_as_bytearray())
+            last_exc = None
+            break
+        except Exception as exc:
+            last_exc = exc
+            logger.warning(
+                "Receipt download attempt %d/3 failed for chat %s: %s",
+                attempt + 1, chat_id, exc,
+            )
+            await asyncio.sleep(1.5 * (attempt + 1))
+
+    if img_bytes is None:
+        exc_str = str(last_exc) if last_exc else "unknown error"
+        if not exc_str:
+            exc_str = type(last_exc).__name__ if last_exc else "UnknownError"
+        logger.error("Receipt download failed for chat %s: %s", chat_id, exc_str)
+        await safe_reply_html(
+            update,
+            f"⚠️ មិនអាចអានវិកាយបត្របានទេ។\n\n<b>Technical Error:</b> <code>{exc_str}</code>\n\n"
+            "សូមផ្ញើរូបភាពច្បាស់ដាងនេះ ឬទាកទងអ្នករៀបចំ។",
+        )
+        return REG_RECEIPT
+
     try:
-        file = await context.bot.get_file(file_id)
-
-        # Download via the bot's own HTTP client so it respects the
-        # Cloudflare/proxy configuration set in TELEGRAM_API_BASE_URL.
-        # Using download_to_drive() opens a *new* direct httpx connection to
-        # api.telegram.org which bypasses the proxy and fails with ConnectError.
-        img_bytes = await file.download_as_bytearray()
-
         # Write bytes to a local temp file for OCR (avoids Windows file locking)
         tmp_dir = Path("data/tmp")
         tmp_dir.mkdir(parents=True, exist_ok=True)
@@ -551,11 +576,14 @@ async def complete_registration(update: Update, context: ContextTypes.DEFAULT_TY
 
 
 async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
-                                     pending, verified: bool = True) -> None:
+                                     pending, verified: bool = True,
+                                     ref: str | None = None) -> None:
     """Complete a registration after payment confirmation.
 
     ``verified=True`` means OCR confirmed the receipt. ``verified=False`` means
     the receipt could not be auto-verified — registration is saved as Unverified.
+    ``ref`` is the receipt reference extracted by OCR; recording it prevents
+    the same receipt from being used again (anti-replay).
     """
     from cpd.services.data_loader import Course, Participant
     from cpd.services.payments import drop_payment
@@ -593,7 +621,7 @@ async def finalize_paid_registration(context: ContextTypes.DEFAULT_TYPE,
         "fee": course.fee,
         "currency": "USD",
         "bill_number": pending.bill_number,
-        "payment_ref": generate_payment_ref(),
+        "payment_ref": ref or generate_payment_ref(),
         "status": "Paid" if verified else "Unverified",
     })
     drop_payment(chat_id)

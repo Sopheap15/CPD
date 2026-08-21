@@ -15,3 +15,4 @@ data/in_bot_registrations.csv
 data/telegram_links.json
 data/used_receipts.json
 ~$*.xlsx
+bot_log.txt

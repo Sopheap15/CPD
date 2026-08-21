@@ -234,6 +234,12 @@ def build_application() -> Application:
     builder = Application.builder().token(TELEGRAM_BOT_TOKEN)
     if TELEGRAM_API_BASE_URL:
         builder = builder.base_url(TELEGRAM_API_BASE_URL)
+        # base_url() does NOT derive the file URL - without this, file
+        # downloads (receipt photos) go straight to api.telegram.org and
+        # fail with ConnectError when that host is blocked.
+        builder = builder.base_file_url(
+            TELEGRAM_API_BASE_URL.replace("/bot", "/file/bot")
+        )
     builder.post_init(_register_commands)
     application = (
         builder
