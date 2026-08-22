@@ -40,6 +40,8 @@ from cpd.constants import (
 from cpd.handlers.admin import (
     cmd_admin,
     cmd_admin_confirm,
+    cmd_admin_course,
+    cmd_admin_courses,
     cmd_admin_group,
     cmd_admin_group_clear,
     cmd_admin_group_rename,
@@ -50,6 +52,8 @@ from cpd.handlers.admin import (
     cmd_admin_reg_clear,
     cmd_admin_reg_del,
     cmd_admin_regs,
+    cmd_admin_reg_add,
+    cmd_admin_reg_move,
     cmd_admin_setup,
     cmd_admin_unlink,
     cmd_admin_view,
@@ -271,7 +275,9 @@ def build_application() -> Application:
         .build()
     )
     application.add_handler(conversation)
-    application.add_handler(CommandHandler("myid", _admin_gate(cmd_myid)))
+    # /myid is public on purpose: a user whose Telegram account changed must
+    # be able to look up their own new ID to give the admin for re-linking.
+    application.add_handler(CommandHandler("myid", cmd_myid))
     application.add_handler(CommandHandler("unlink", _admin_gate(cmd_unlink)))
     application.add_handler(CommandHandler("admin_list", cmd_admin_list))
     application.add_handler(CommandHandler("admin_link", cmd_admin_link))
@@ -284,8 +290,12 @@ def build_application() -> Application:
     application.add_handler(CommandHandler("admin_confirm", cmd_admin_confirm))
     application.add_handler(CommandHandler("admin", cmd_admin))
     application.add_handler(CommandHandler("admin_groups", cmd_admin_groups))
+    application.add_handler(CommandHandler("admin_course", cmd_admin_course))
+    application.add_handler(CommandHandler("admin_courses", cmd_admin_courses))
     application.add_handler(CommandHandler("admin_group_rename", cmd_admin_group_rename))
     application.add_handler(CommandHandler("admin_reg_del", cmd_admin_reg_del))
+    application.add_handler(CommandHandler("admin_reg_add", cmd_admin_reg_add))
+    application.add_handler(CommandHandler("admin_reg_move", cmd_admin_reg_move))
     application.add_handler(CommandHandler("admin_reg_clear", cmd_admin_reg_clear))
     application.add_handler(CommandHandler("admin_kick", cmd_admin_kick))
     application.add_error_handler(_error_handler)

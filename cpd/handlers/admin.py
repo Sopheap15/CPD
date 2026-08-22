@@ -384,3 +384,263 @@ async def cmd_admin_kick(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     await safe_reply_html(update, fmt("admin_kick_ok", tid=escape(tid),
                                       course=escape(course_id)))
+
+
+def _bot_trainings_for_course(data, course) -> list:
+    """Bot-registered participants (merged trainings) of one course."""
+    title = (course.title or "").strip().lower()
+    if not title:
+        return []
+    return [
+        tr for tr in data.trainings
+        if tr.source == "bot" and (tr.title or "").strip().lower() == title
+    ]
+
+
+async def _courses_overview(update: Update,
+                            context: ContextTypes.DEFAULT_TYPE) -> None:
+    """One summary line per course: registrations & pickups."""
+    data = _cpd(context)
+    lines = [t("admin_courses_title")]
+    for c in data.courses:
+        trs = _bot_trainings_for_course(data, c)
+        total = len(trs)
+        picked = sum(1 for tr in trs if tr.picked_up)
+        icon = "✅" if total and picked == total else ("🎓" if picked else "📚")
+        lines.append(fmt("admin_courses_line", icon=icon,
+                         course=escape(c.course_id), total=total,
+                         picked=picked))
+    await safe_reply_html(update, "\n".join(lines))
+
+
+async def cmd_admin_courses(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin: /admin_courses [Course ID] — all courses, or one course's detail."""
+    if not _is_admin(update):
+        await safe_reply_html(update, t("admin_only"))
+        return
+    if context.args:
+        # Same command accepts an ID so autocomplete mix-ups still work.
+        await cmd_admin_course(update, context)
+        return
+    await _courses_overview(update, context)
+
+
+async def cmd_admin_course(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin: /admin_course [Course ID] — detail per course; without an ID
+    it falls back to the overview so both spellings always answer."""
+    if not _is_admin(update):
+        await safe_reply_html(update, t("admin_only"))
+        return
+    args = context.args or []
+    if not args:
+        await _courses_overview(update, context)
+        return
+    course_id = args[0].strip().rstrip(".").upper()
+    data = _cpd(context)
+    course = next((c for c in data.courses
+                   if c.course_id.strip().upper() == course_id.upper()), None)
+    if course is None:
+        ids = ", ".join(c.course_id for c in data.courses) or "—"
+        await safe_reply_html(update, fmt("admin_course_notfound",
+                                          course=escape(course_id),
+                                          ids=escape(ids)))
+        return
+
+    trs = sorted(_bot_trainings_for_course(data, course),
+                 key=lambda tr: (tr.participant_name or "").lower())
+    total = len(trs)
+    picked_n = sum(1 for tr in trs if tr.picked_up)
+    pct = round(picked_n * 100 / total) if total else 0
+    lines = [fmt("admin_course_title", course=escape(course.course_id),
+                 title=escape(course.title), total=total, picked=picked_n,
+                 pct=pct)]
+    if not trs:
+        lines.append(t("admin_course_empty"))
+    for tr in trs:
+        # Show the Khmer name next to the Latin one when we know it.
+        khmer = ""
+        for p in data.participants:
+            if p.participant_id and p.participant_id == tr.participant_id \
+                    and p.khmer_name:
+                khmer = p.khmer_name
+                break
+        name = f"{khmer} / {tr.participant_name}" if khmer \
+            else tr.participant_name
+        when = (tr.pickup_date or "")[:16]
+        if tr.picked_up:
+            lines.append(fmt("admin_course_picked_line", name=escape(name),
+                             date=escape(when)))
+        else:
+            lines.append(fmt("admin_course_pending_line", name=escape(name)))
+    await safe_reply_html(update, "\n".join(lines))
+
+
+async def cmd_admin_reg_add(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin: /admin_reg_add <Course ID> <Full Name> — register someone who
+    has no Telegram account (walk-in / cash payment) directly as Paid."""
+    if not _is_admin(update):
+        await safe_reply_html(update, t("admin_only"))
+        return
+    args = context.args or []
+    if len(args) < 2:
+        await safe_reply_html(update, t("admin_reg_add_usage"))
+        return
+    data = _cpd(context)
+    course = None
+    name_parts: list[str] = []
+    # Accept the course ID as either the first or the last token.
+    for idx in (0, len(args) - 1):
+        cand = args[idx].strip().upper()
+        course = next((c for c in data.courses
+                       if c.course_id.strip().upper() == cand), None)
+        if course is not None:
+            name_parts = args[:idx] + args[idx + 1:]
+            break
+    if course is None:
+        ids = ", ".join(c.course_id for c in data.courses) or "—"
+        await safe_reply_html(update, fmt("admin_reg_add_notfound",
+                                          course=escape(args[0]),
+                                          ids=escape(ids)))
+        return
+    full_name = " ".join(name_parts).strip()
+    if not full_name:
+        await safe_reply_html(update, t("admin_reg_add_usage"))
+        return
+
+    from cpd.handlers.registration import _has_khmer
+    from cpd.services.registrations import (
+        append_registration,
+        generate_payment_ref,
+        load_registrations,
+    )
+    key = full_name.strip().lower()
+    for r in load_registrations():
+        if (r.get("course_id") or "").strip().upper() != course.course_id.upper():
+            continue
+        if (r.get("status") or "") not in ("Paid", "Registered", "Unverified"):
+            continue
+        names = {(r.get("name") or "").strip().lower(),
+                 (r.get("khmer_name") or "").strip().lower()}
+        if key in names:
+            await safe_reply_html(update, fmt(
+                "admin_reg_add_dup", name=escape(full_name),
+                course=escape(course.course_id)))
+            return
+
+    record = {
+        "name": "" if _has_khmer(full_name) else full_name,
+        "khmer_name": full_name if _has_khmer(full_name) else "",
+        "course_id": course.course_id,
+        "course_title": course.title,
+        "course_date": course.date,
+        "cpd_points": course.cpd_points,
+        "fee": course.fee,
+        "currency": "USD",
+        "payment_ref": generate_payment_ref(),
+        "status": "Paid",
+    }
+    append_registration(record)
+    await safe_reply_html(update, fmt(
+        "admin_reg_add_ok", name=escape(full_name),
+        course=escape(course.course_id), title=escape(course.title)))
+
+
+async def cmd_admin_reg_move(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Admin: /admin_reg_move <ID or Name> <From> <To> — move a registration.
+
+    Keeps the payment record (bill, reference, status) and rewrites the
+    course columns, so the participant appears under the new course without
+    paying/registering again.
+    """
+    if not _is_admin(update):
+        await safe_reply_html(update, t("admin_only"))
+        return
+    args = context.args or []
+    if len(args) < 3:
+        await safe_reply_html(update, t("admin_reg_move_usage"))
+        return
+    data = _cpd(context)
+
+    def find_course(token: str):
+        token = token.strip().upper()
+        return next((c for c in data.courses
+                     if c.course_id.strip().upper() == token), None)
+
+    from_course = find_course(args[-2])
+    to_course = find_course(args[-1])
+    if from_course is None or to_course is None:
+        ids = ", ".join(c.course_id for c in data.courses) or "—"
+        bad = args[-2] if from_course is None else args[-1]
+        await safe_reply_html(update, fmt("admin_reg_add_notfound",
+                                          course=escape(bad), ids=escape(ids)))
+        return
+    if from_course.course_id == to_course.course_id:
+        await safe_reply_html(update, t("admin_reg_move_same"))
+        return
+
+    who = " ".join(args[:-2]).strip()
+    is_tid = who.lstrip("-").isdigit()
+
+    from cpd.services.registrations import load_registrations, _write
+    rows = load_registrations()
+    target = None
+    key = who.lower()
+    for r in rows:
+        if (r.get("course_id") or "").strip().upper() != from_course.course_id.upper():
+            continue
+        if is_tid:
+            if str(r.get("telegram_id", "")).strip() == who:
+                target = r
+                break
+        else:
+            names = {(r.get("name") or "").strip().lower(),
+                     (r.get("khmer_name") or "").strip().lower()}
+            if key in names:
+                target = r
+                break
+    if target is None:
+        await safe_reply_html(update, fmt(
+            "admin_reg_move_notfound", who=escape(who),
+            course=escape(from_course.course_id)))
+        return
+
+    # Block the move when the person already sits in the destination course.
+    names_t = {(target.get("name") or "").strip().lower(),
+               (target.get("khmer_name") or "").strip().lower()}
+    tid_t = str(target.get("telegram_id", "")).strip()
+    for r in rows:
+        if (r.get("course_id") or "").strip().upper() != to_course.course_id.upper():
+            continue
+        r_names = {(r.get("name") or "").strip().lower(),
+                   (r.get("khmer_name") or "").strip().lower()}
+        same_person = (
+            (tid_t and str(r.get("telegram_id", "")).strip() == tid_t)
+            or (key in r_names))
+        if same_person and (r.get("status") or "") in ("Paid", "Registered",
+                                                       "Unverified"):
+            display = target.get("name") or target.get("khmer_name") or who
+            await safe_reply_html(update, fmt(
+                "admin_reg_move_dup", name=escape(display),
+                course=escape(to_course.course_id)))
+            return
+
+    name = target.get("name") or target.get("khmer_name") or who
+    target["course_id"] = to_course.course_id
+    target["course_title"] = to_course.title
+    target["course_date"] = to_course.date
+    target["cpd_points"] = to_course.cpd_points
+    target["fee"] = to_course.fee
+    _write(rows)
+
+    diff = round((to_course.fee or 0) - (from_course.fee or 0), 2)
+    if diff > 0:
+        fee_line = fmt("admin_reg_move_fee_up", amount=f"{diff:.2f}")
+    elif diff < 0:
+        fee_line = fmt("admin_reg_move_fee_down", amount=f"{abs(diff):.2f}")
+    else:
+        fee_line = ""
+    await safe_reply_html(update, fmt(
+        "admin_reg_move_ok", name=escape(name),
+        from_course=escape(from_course.course_id),
+        to_course=escape(to_course.course_id),
+        title=escape(to_course.title), fee_line=fee_line))

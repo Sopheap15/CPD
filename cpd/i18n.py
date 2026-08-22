@@ -298,8 +298,12 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "• /admin_group_clear &lt;Course ID&gt; — unlink a course group\n"
         "• /admin_regs — list registrations\n"
         "• /admin_reg_del &lt;telegram_id&gt; &lt;course_id&gt; — delete one registration\n"
+        "• /admin_reg_add &lt;Course ID&gt; &lt;Name&gt; — register someone without Telegram (cash)\n"
+        "• /admin_reg_move &lt;ID/Name&gt; &lt;From&gt; &lt;To&gt; — move a participant to another course\n"
         "• /admin_reg_clear — delete ALL registrations\n"
         "• /admin_confirm &lt;bill&gt; — mark a manual payment as Paid\n"
+        "• /admin_courses — registrations & pickups per course\n"
+        "• /admin_course &lt;Course ID&gt; — participants of one course with pickup status\n"
         "• /admin_kick &lt;Course ID&gt; &lt;telegram_id&gt; — remove a member from a course group\n"
         "• /admin_list — linked Telegram ↔ participant accounts\n"
         "• /admin_link &lt;ID&gt; &lt;Name&gt; / /admin_unlink &lt;ID or Name&gt;\n"
@@ -311,8 +315,12 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
         "• /admin_group_clear &lt;Course ID&gt; — ផ្តាច់ក្រុមវគ្គ\n"
         "• /admin_regs — បញ្ជីការចុះឈ្មោះ\n"
         "• /admin_reg_del &lt;telegram_id&gt; &lt;course_id&gt; — លុបការចុះឈ្មោះមួយ\n"
+        "• /admin_reg_add &lt;លេខវគ្គ&gt; &lt;ឈ្មោះ&gt; — ចុះឈ្មោះជំនួសអ្នកគ្មាន Telegram (សាច់ប្រាក់)\n"
+        "• /admin_reg_move &lt;ID/ឈ្មោះ&gt; &lt;វគ្គចាស់&gt; &lt;វគ្គថ្មី&gt; — ផ្លាស់ទីអ្នកចូលរួមទៅវគ្គផ្សេង\n"
         "• /admin_reg_clear — លុបការចុះឈ្មោះទាំងអស់\n"
         "• /admin_confirm &lt;bill&gt; — បញ្ជាក់ការបង់ប្រាក់ដោយដៃ\n"
+        "• /admin_courses — ការចុះឈ្មោះ និងការទទួលវិញ្ញាបនបត្រតាមវគ្គ\n"
+        "• /admin_course &lt;លេខវគ្គ&gt; — បញ្ជីអ្នកចូលរួមមួយវគ្គ ជាមួយស្ថានភាពទទួលវិញ្ញាបនបត្រ\n"
         "• /admin_kick &lt;Course ID&gt; &lt;telegram_id&gt; — ដកសមាជិកចេញពីក្រុមវគ្គ\n"
         "• /admin_list — បញ្ជីគណនី Telegram ↔ អ្នកចូលរួម\n"
         "• /admin_link &lt;ID&gt; &lt;ឈ្មោះ&gt; / /admin_unlink &lt;ID ឬ ឈ្មោះ&gt;\n"
@@ -321,6 +329,104 @@ TRANSLATIONS: dict[str, tuple[str, str]] = {
     "admin_groups_title": (
         "Course groups ({count} linked):",
         "ក្រុមវគ្គ ({count} បានភ្ជាប់)៖",
+    ),
+    "admin_courses_title": (
+        "<b>🎓 Courses — registrations & certificate pickups</b>",
+        "<b>🎓 វគ្គសិក្សា — ការចុះឈ្មោះ និងការទទួលវិញ្ញាបនបត្រ</b>",
+    ),
+    "admin_courses_line": (
+        "{icon} <b>{course}</b> — 👥 {total} registered · ✅ {picked} picked up",
+        "{icon} <b>{course}</b> — 👥 {total} ចុះឈ្មោះ · ✅ {picked} បានទទួល",
+    ),
+    "admin_course_usage": (
+        "Usage: /admin_course &lt;Course ID&gt;\n"
+        "Example: /admin_course C002\n"
+        "Tip: /admin_courses shows every course with totals.",
+        "ការប្រើប្រាស់៖ /admin_course &lt;លេខវគ្គ&gt;\n"
+        "ឧទាហរណ៍៖ /admin_course C002\n"
+        "គន្លឹះ៖ /admin_courses បង្ហាញវគ្គទាំងអស់។",
+    ),
+    "admin_course_notfound": (
+        "Course {course} not found. Valid IDs: {ids}",
+        "រកមិនឃើញវគ្គ {course}។ លេខវគ្គត្រឹមត្រូវ៖ {ids}",
+    ),
+    "admin_course_title": (
+        "<b>🎓 {course} — {title}</b>\n"
+        "👥 {total} registered · ✅ {picked} picked up ({pct}%)",
+        "<b>🎓 {course} — {title}</b>\n"
+        "👥 {total} ចុះឈ្មោះ · ✅ {picked} បានទទួល ({pct}%)",
+    ),
+    "admin_course_empty": (
+        "No verified registrations for this course yet.",
+        "មិនទាន់មានការចុះឈ្មោះបានបញ្ជាក់សម្រាប់វគ្គនេះទេ។",
+    ),
+    "admin_course_picked_line": (
+        "✅ {name} — picked up {date}",
+        "✅ {name} — បានទទួល {date}",
+    ),
+    "admin_course_pending_line": (
+        "⬜ {name} — not picked up yet",
+        "⬜ {name} — មិនទាន់បានទទួល",
+    ),
+    "admin_reg_add_usage": (
+        "Usage: /admin_reg_add &lt;Course ID&gt; &lt;Full Name&gt;\n"
+        "Example: /admin_reg_add C002 Oeng Sopheap\n"
+        "Registers someone without a Telegram account (walk-in / cash).",
+        "ការប្រើប្រាស់៖ /admin_reg_add &lt;លេខវគ្គ&gt; &lt;ឈ្មោះពេញ&gt;\n"
+        "ឧទាហរណ៍៖ /admin_reg_add C002 អេង សុភាព\n"
+        "ចុះឈ្មោះជំនួសអ្នកដែលមិនមាន Telegram (បង់សាច់ប្រាក់)។",
+    ),
+    "admin_reg_add_notfound": (
+        "Course {course} not found. Valid IDs: {ids}",
+        "រកមិនឃើញវគ្គ {course}។ លេខវគ្គត្រូវ៖ {ids}",
+    ),
+    "admin_reg_add_ok": (
+        "✅ Registered <b>{name}</b> for {course}\n"
+        "<b>{title}</b>\n"
+        "Status: Paid (recorded by admin)",
+        "✅ បានចុះឈ្មោះ <b>{name}</b> ចូលវគ្គ {course}\n"
+        "<b>{title}</b>\n"
+        "ស្ថានភាព៖ បង់ប្រាក់រួច (ចុះដោយអ្នកគ្រប់គ្រង)",
+    ),
+    "admin_reg_add_dup": (
+        "⚠️ {name} is already registered for {course}.",
+        "⚠️ {name} បានចុះឈ្មោះវគ្គ {course} រួចហើយ។",
+    ),
+    "admin_reg_move_usage": (
+        "Usage: /admin_reg_move &lt;Telegram ID or Full Name&gt; "
+        "&lt;From Course&gt; &lt;To Course&gt;\n"
+        "Example: /admin_reg_move 699463365 C001 C002\n"
+        "Example: /admin_reg_move Oeng Sopheap C001 C002",
+        "ការប្រើប្រាស់៖ /admin_reg_move &lt;Telegram ID ឬ ឈ្មោះពេញ&gt; "
+        "&lt;វគ្គចាស់&gt; &lt;វគ្គថ្មី&gt;\n"
+        "ឧទាហរណ៍៖ /admin_reg_move 699463365 C001 C002\n"
+        "ឧទាហរណ៍៖ /admin_reg_move អេង សុភាព C001 C002",
+    ),
+    "admin_reg_move_notfound": (
+        "No registration found for {who} in course {course}.",
+        "រកមិនឃើញការចុះឈ្មោះរបស់ {who} ក្នុងវគ្គ {course} ទេ។",
+    ),
+    "admin_reg_move_dup": (
+        "⚠️ {name} is already registered in {course}. Nothing moved.",
+        "⚠️ {name} បានចុះឈ្មោះវគ្គ {course} រួចហើយ។ មិនបានផ្លាស់ទេ។",
+    ),
+    "admin_reg_move_same": (
+        "⚠️ From and To course are identical.",
+        "⚠️ វគ្គចាស់ និងវគ្គថ្មីដូចគ្នា។",
+    ),
+    "admin_reg_move_ok": (
+        "✅ Moved <b>{name}</b>: {from_course} → {to_course}\n"
+        "<b>{title}</b>{fee_line}",
+        "✅ បានផ្លាស់ <b>{name}</b>: {from_course} → {to_course}\n"
+        "<b>{title}</b>{fee_line}",
+    ),
+    "admin_reg_move_fee_up": (
+        "\n💵 Please collect ${amount} difference.",
+        "\n💵 សូមទទួលប្រាក់ខ្វះ ${amount}។",
+    ),
+    "admin_reg_move_fee_down": (
+        "\n💵 Refund ${amount} to the participant.",
+        "\n💵 សូមសងប្រាក់ ${amount} វិញ។",
     ),
     "admin_group_rename_usage": (
         "Usage: /admin_group_rename &lt;Course ID&gt; &lt;new title&gt;\n"
