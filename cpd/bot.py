@@ -132,12 +132,13 @@ async def _register_commands(app: Application) -> None:
     commands = [
         BotCommand("start", "Start / restart the bot"),
         BotCommand("cancel", "Cancel current action"),
+        BotCommand("myid", "Show your Telegram ID"),
+        BotCommand("unlink", "Unlink your account"),
     ]
     try:
         await app.bot.set_my_commands(commands)
-    except Exception:  # noqa: BLE001 - non-fatal (network/Telegram hiccup)
-        logger.warning("Failed to register command menu: %r",
-                       "set_my_commands failed")
+    except Exception as e:  # noqa: BLE001 - non-fatal (network/Telegram hiccup)
+        logger.warning("Failed to register command menu: %s", e)
 
 
 def build_application() -> Application:
@@ -278,7 +279,7 @@ def build_application() -> Application:
     # /myid is public on purpose: a user whose Telegram account changed must
     # be able to look up their own new ID to give the admin for re-linking.
     application.add_handler(CommandHandler("myid", cmd_myid))
-    application.add_handler(CommandHandler("unlink", _admin_gate(cmd_unlink)))
+    application.add_handler(CommandHandler("unlink", cmd_unlink))
     application.add_handler(CommandHandler("admin_list", cmd_admin_list))
     application.add_handler(CommandHandler("admin_link", cmd_admin_link))
     application.add_handler(CommandHandler("admin_unlink", cmd_admin_unlink))
@@ -339,7 +340,13 @@ def main() -> None:
 
     logger.info("Starting CPD Track bot (polling)…")
     app = build_application()
-    app.run_polling()
+    try:
+        app.run_polling()
+    except KeyboardInterrupt:
+        logger.info("Bot stopped by user")
+    except Exception as e:
+        logger.error("Bot crashed: %s", e)
+        raise
 
 
 if __name__ == "__main__":
