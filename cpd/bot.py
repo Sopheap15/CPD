@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import functools
 import logging
+import os
 import warnings
+from pathlib import Path
 
 from telegram import Update
 from telegram.ext import (
@@ -84,6 +86,37 @@ from cpd.i18n import fmt, t
 from cpd.services.storage import get_linked_name, unlink_account
 
 logger = logging.getLogger(__name__)
+
+
+def _acquire_single_instance_lock() -> tuple[object, Path] | None:
+    """Prevent duplicate bot polling in the same project directory."""
+    lock_path = Path(__file__).resolve().parent.parent / ".bot.lock"
+    lock_file = open(lock_path, "w", encoding="utf-8")
+    try:
+        if os.name == "nt":
+            import msvcrt
+
+            lock_file.seek(0)
+            msvcrt.locking(lock_file.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        lock_file.write(str(os.getpid()))
+        lock_file.flush()
+        return lock_file, lock_path
+    except Exception as exc:  # noqa: BLE001 - duplicate instance protection
+        lock_file.close()
+        if lock_path.exists():
+            try:
+                lock_path.unlink()
+            except OSError:
+                pass
+        raise RuntimeError(
+            "Another CPD bot instance is already running. "
+            "Stop it before starting a new one."
+        ) from exc
 
 
 async def cmd_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -315,6 +348,13 @@ def main() -> None:
 
     validate()
 
+    lock_handle = None
+    lock_path = None
+    try:
+        lock_handle, lock_path = _acquire_single_instance_lock()
+    except RuntimeError as exc:
+        raise SystemExit(str(exc)) from exc
+
     class _ScrubFormatter(logging.Formatter):
         """Never let the bot token leak into any log line."""
 
@@ -347,6 +387,26 @@ def main() -> None:
     except Exception as e:
         logger.error("Bot crashed: %s", e)
         raise
+    finally:
+        if lock_handle is not None:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    lock_handle.seek(0)
+                    msvcrt.locking(lock_handle.fileno(), msvcrt.LK_UNLCK, 1)
+                else:
+                    import fcntl
+
+                    fcntl.flock(lock_handle.fileno(), fcntl.LOCK_UN)
+            except Exception:  # noqa: BLE001
+                pass
+            lock_handle.close()
+            if lock_path is not None:
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
 
 
 if __name__ == "__main__":
