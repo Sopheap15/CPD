@@ -8,7 +8,7 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
+load_dotenv(BASE_DIR / ".env", override=True)
 
 PROJECT_DIR = BASE_DIR
 DATA_DIR = Path(os.getenv("CPD_DATA_DIR", BASE_DIR / "data"))
@@ -38,7 +38,7 @@ TELEGRAM_PROXY = os.getenv("TELEGRAM_PROXY", "").strip()
 # Alternative Telegram Bot API endpoint (e.g. a Cloudflare Worker proxy) used
 # when api.telegram.org is unreachable. Must end with "/bot".
 TELEGRAM_API_BASE_URL = os.getenv("TELEGRAM_API_BASE_URL", "").strip()
-TELEGRAM_READ_TIMEOUT = float(os.getenv("TELEGRAM_READ_TIMEOUT", "30"))
+TELEGRAM_READ_TIMEOUT = float(os.getenv("TELEGRAM_READ_TIMEOUT", "60"))
 TELEGRAM_CONNECT_TIMEOUT = float(os.getenv("TELEGRAM_CONNECT_TIMEOUT", "30"))
 
 
