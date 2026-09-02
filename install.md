@@ -196,26 +196,54 @@ Copy-Item .env \\NEWPC\shared-folder\
 
 ## Step 7 — Run the bot
 
+### Windows
+
 ```powershell
+# Start the bot
 .\run.ps1 start
+
+# Stop the bot
+.\run.ps1 stop
+
+# Check if bot is running
+.\run.ps1 status
 ```
 
+### macOS / Linux
+
+```bash
+# Start the bot
+./run.sh start
+
+# Stop the bot
+./run.sh stop
+
+# Check if bot is running
+./run.sh status
+```
+
+### Manual command (any OS)
+
+```bash
+pixi run python main.py
+```
+
+Stop with: press `Ctrl-C` in the terminal.
+
 * First time: Windows may ask to allow Python through the firewall → **Allow**.
-* Stop: press `Ctrl-C` (or `.\run.ps1 stop` from another terminal).
-* Check whether it runs: `.\run.ps1 status`.
 * Test it: message the bot on Telegram → `/start` → try **View CPD History**
   and a test registration.
 
 ### Useful commands
 
-| Command | Action |
-|---|---|
-| `.\run.ps1 start` | Start the bot (foreground) |
-| `.\run.ps1 stop` | Stop a running bot |
-| `.\run.ps1 status` | Show running/not running |
-| `.\run.ps1 lint` | Syntax-check all Python files |
-| `.\run.ps1 shell` | Open a shell inside the Python environment |
-| `.\run.ps1 install` | Re-install environment (after dependency changes) |
+| Command (Windows) | Command (macOS/Linux) | Action |
+|---|---|---|
+| `.\run.ps1 start` | `./run.sh start` | Start the bot (foreground) |
+| `.\run.ps1 stop` | `./run.sh stop` | Stop a running bot |
+| `.\run.ps1 status` | `./run.sh status` | Show running/not running |
+| `.\run.ps1 lint` | `./run.sh lint` | Syntax-check all Python files |
+| `.\run.ps1 shell` | `./run.sh shell` | Open a shell inside the Python environment |
+| `.\run.ps1 install` | `./run.sh install` | Re-install environment (after dependency changes) |
 
 ---
 
@@ -223,13 +251,21 @@ Copy-Item .env \\NEWPC\shared-folder\
 
 To get the latest code:
 
+### Windows
 ```powershell
 git pull
 .\run.ps1 stop
 .\run.ps1 start
 ```
 
-Excel files in `data\` can be edited while the bot runs — changes reload
+### macOS / Linux
+```bash
+git pull
+./run.sh stop
+./run.sh start
+```
+
+Excel files in `data/` can be edited while the bot runs — changes reload
 automatically, no restart needed.
 
 ---

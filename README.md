@@ -91,19 +91,40 @@ auto-reload when changed, so you can edit them while the bot runs.
 
 ### 6. Run the bot
 
-Windows (foreground, Ctrl-C to stop):
+**Start the bot (foreground, use Ctrl-C to stop):**
+
+Windows:
 ```powershell
 .\run.ps1 start
 ```
 
-Windows (background — keeps running after you close the terminal):
+macOS / Linux:
+```bash
+./run.sh start
+```
+
+**Stop the bot:**
+
+Windows:
 ```powershell
-Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\CPD"
+.\run.ps1 stop
 ```
 
 macOS / Linux:
 ```bash
-nohup ./run.sh start > data/cpd.out 2> data/cpd.err &
+./run.sh stop
+```
+
+**Check if bot is running:**
+
+Windows:
+```powershell
+.\run.ps1 status
+```
+
+macOS / Linux:
+```bash
+./run.sh status
 ```
 
 You should see logs ending with `Application started` — your bot is now online.
@@ -113,15 +134,25 @@ You should see logs ending with `Application started` — your bot is now online
 Each project is fully self-contained in its own folder with its own `.env` and
 its own `.pixi` environment. Just start each one in its own directory:
 
+**Windows:**
 ```powershell
 cd C:\Users\osopheap\Desktop\CPD
-Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\CPD"
+.\run.ps1 start
 
 cd C:\Users\osopheap\Desktop\Clerkship_bot
-Start-Process -FilePath "pixi" -ArgumentList "run","start" -WorkingDirectory "C:\Users\osopheap\Desktop\Clerkship_bot"
+.\run.ps1 start
 ```
 
-They run side-by-side without conflicting.
+**macOS / Linux:**
+```bash
+cd /path/to/CPD
+./run.sh start
+
+cd /path/to/Clerkship_bot
+./run.sh start
+```
+
+**Important:** Run each bot in a separate terminal window. Do NOT start the same bot twice — it will conflict with Telegram.
 
 ## Cloudflare Worker (Telegram API proxy)
 
